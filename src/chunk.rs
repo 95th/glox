@@ -1,78 +1,42 @@
-use std::convert::TryFrom;
-use std::fmt::Display;
-use std::ops::{Deref, DerefMut};
+use crate::value::Value;
+use num_derive::{FromPrimitive, ToPrimitive};
 
-#[derive(Debug)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 #[repr(u8)]
 pub enum OpCode {
+    Constant,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Negate,
     Return,
 }
 
-impl TryFrom<u8> for OpCode {
-    type Error = u8;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        use OpCode::*;
-        let opcode = match value {
-            0 => Return,
-            _ => return Err(value),
-        };
-        Ok(opcode)
-    }
-}
-
-impl OpCode {
-    pub fn instr_len(&self) -> usize {
-        use OpCode::*;
-        match *self {
-            Return => 1,
-        }
-    }
-}
-
 #[derive(Default)]
-pub struct Chunk(Vec<u8>);
+pub struct Chunk {
+    pub code: Vec<u8>,
+    pub values: Vec<Value>,
+    pub lines: Vec<usize>,
+}
 
 impl Chunk {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn disassemble(&self, name: impl Display) {
-        println!("== {} ==", name);
-
-        let mut offset = 0;
-        while offset < self.len() {
-            offset = self.disassemble_instr(offset);
-        }
+    pub fn push_instr(&mut self, opcode: OpCode, line: usize) {
+        self.push_chunk(opcode as _, line);
     }
 
-    fn disassemble_instr(&self, offset: usize) -> usize {
-        print!("{:04}", offset);
-
-        let opcode = match OpCode::try_from(self[offset]) {
-            Ok(opcode) => opcode,
-            Err(b) => {
-                println!("Unknown opcode {}", b);
-                return offset + 1;
-            }
-        };
-
-        println!("{:?}", opcode);
-        offset + opcode.instr_len()
+    pub fn push_chunk(&mut self, byte: u8, line: usize) {
+        self.code.push(byte);
+        self.lines.push(line);
     }
-}
 
-impl Deref for Chunk {
-    type Target = Vec<u8>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Chunk {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+    pub fn push_const(&mut self, value: Value) -> usize {
+        let len = self.values.len();
+        self.values.push(value);
+        len
     }
 }

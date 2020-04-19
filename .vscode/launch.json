@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'glox'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=glox",
+                    "--package=glox"
+                ],
+                "filter": {
+                    "name": "glox",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "env": {
+                "RUST_LOG": "trace"
+            },
+            "cwd": "${workspaceFolder}"
+        },
+    ]
+}
