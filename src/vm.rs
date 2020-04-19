@@ -90,7 +90,7 @@ impl<'a> VmSession<'a> {
                 Divide => binary_op!(self, /),
                 Negate => {
                     let value = pop!(self);
-                    self.vm.stack.push(-value);
+                    push!(self, -value);
                 }
                 Return => {
                     println!("{}", pop!(self));
