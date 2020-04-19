@@ -7,5 +7,7 @@ edition = "2018"
 [dependencies]
 num-traits = "0.2"
 num-derive = "0.3"
-log = { version = "0.4.8", features = ["release_max_level_off"] }
-env_logger = "0.7.1"
+log = { version = "0.4", features = ["release_max_level_off"] }
+env_logger = "0.7"
+clap = "2.33"
+rustyline = "6.1"

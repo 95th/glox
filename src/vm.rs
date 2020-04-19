@@ -4,11 +4,13 @@ use log::Level;
 use num_traits::FromPrimitive;
 use std::fmt::Write;
 
-pub enum InterpretResult {
-    Ok,
-    CompileError,
-    RuntimeError,
+#[derive(Debug)]
+pub enum InterpretError {
+    Compile,
+    Runtime,
 }
+
+pub type InterpretResult<T> = Result<T, InterpretError>;
 
 pub struct Vm {
     stack: Vec<Value>,
@@ -22,7 +24,7 @@ impl Vm {
         }
     }
 
-    pub fn interpret(&mut self, chunk: &Chunk) -> InterpretResult {
+    pub fn interpret(&mut self, chunk: &Chunk) -> InterpretResult<()> {
         let mut session = VmSession {
             vm: self,
             chunk,
@@ -68,7 +70,7 @@ macro_rules! binary_op {
 }
 
 impl<'a> VmSession<'a> {
-    fn run(&mut self) -> InterpretResult {
+    fn run(&mut self) -> InterpretResult<()> {
         use OpCode::*;
 
         self.vm.stack.clear();
@@ -94,12 +96,12 @@ impl<'a> VmSession<'a> {
                 }
                 Return => {
                     println!("{}", pop!(self));
-                    return InterpretResult::Ok;
+                    return Ok(());
                 }
             }
         }
 
-        InterpretResult::Ok
+        Ok(())
     }
 
     fn read_byte(&mut self) -> Option<u8> {
