@@ -1,32 +1,39 @@
 use std::fmt;
 
 macro_rules! __impl_accessors {
-    ($is_fn: ident, $pat: pat, $as_fn: ident, $as_ty: ty, $val: expr) => {
-        #[allow(unused_variables)]
-        pub fn $is_fn(&self) -> bool {
-            matches!(self, $pat)
+    ($is_fn: ident, $variant: ident, $as_fn: ident, $inner_ty: ty) => {
+        impl Value {
+            pub fn $is_fn(&self) -> bool {
+                matches!(self, Self::$variant(_))
+            }
+
+            pub fn $as_fn(&self) -> Option<$inner_ty> {
+                match self {
+                    Self::$variant(v) => Some(*v),
+                    _ => None,
+                }
+            }
         }
 
-        pub fn $as_fn(&self) -> Option<$as_ty> {
-            match self {
-                $pat => Some($val),
-                _ => None,
+        impl From<$inner_ty> for Value {
+            fn from(val: $inner_ty) -> Self {
+                Self::$variant(val)
             }
         }
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Nil,
     Boolean(bool),
     Double(f64),
 }
 
-impl Value {
-    __impl_accessors!(is_boolean, Self::Boolean(v), as_boolean, bool, *v);
-    __impl_accessors!(is_double, Self::Double(v), as_double, f64, *v);
+__impl_accessors!(is_boolean, Boolean, as_boolean, bool);
+__impl_accessors!(is_double, Double, as_double, f64);
 
+impl Value {
     pub fn is_nil(&self) -> bool {
         matches!(self, Self::Nil)
     }

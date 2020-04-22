@@ -110,13 +110,13 @@ impl<'a> Compiler<'a> {
             Slash => p!(None, Some binary, Factor),
             Star => p!(None, Some binary, Factor),
             Bang => p!(Some unary, None, None),
-            BangEqual => p!(),
+            BangEqual => p!(None, Some binary, Equality),
             Equal => p!(),
-            EqualEqual => p!(),
-            Greater => p!(),
-            GreaterEqual => p!(),
-            Less => p!(),
-            LessEqual => p!(),
+            EqualEqual => p!(None, Some binary, Equality),
+            Greater => p!(None, Some binary, Comparison),
+            GreaterEqual => p!(None, Some binary, Comparison),
+            Less => p!(None, Some binary, Comparison),
+            LessEqual => p!(None, Some binary, Comparison),
             Identifier => p!(),
             String => p!(),
             Number => p!(Some number, None, None),
@@ -190,6 +190,12 @@ impl<'a> Compiler<'a> {
 
         // Emit the operator instruction
         match operator {
+            TokenKind::BangEqual => self.emit_op2(OpCode::Equal, OpCode::Not),
+            TokenKind::EqualEqual => self.emit_op(OpCode::Equal),
+            TokenKind::Greater => self.emit_op(OpCode::Greater),
+            TokenKind::GreaterEqual => self.emit_op2(OpCode::Less, OpCode::Not),
+            TokenKind::Less => self.emit_op(OpCode::Less),
+            TokenKind::LessEqual => self.emit_op2(OpCode::Greater, OpCode::Not),
             TokenKind::Plus => self.emit_op(OpCode::Add),
             TokenKind::Minus => self.emit_op(OpCode::Subtract),
             TokenKind::Star => self.emit_op(OpCode::Multiply),
@@ -225,6 +231,11 @@ impl<'a> Compiler<'a> {
 
     fn emit_op(&mut self, op: OpCode) {
         self.emit_byte(op as u8);
+    }
+
+    fn emit_op2(&mut self, op_1: OpCode, op_2: OpCode) {
+        self.emit_op(op_1);
+        self.emit_op(op_2);
     }
 
     fn emit_return(&mut self) {

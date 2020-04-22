@@ -59,7 +59,7 @@ macro_rules! binary_op {
         let b = pop!($me);
         let a = pop!($me);
         if let (Some(a), Some(b)) = (a.as_double(), b.as_double()) {
-            push!($me, Value::Double(a $op b));
+            push!($me, Value::from(a $op b));
         } else {
             push!($me, a);
             push!($me, b);
@@ -103,6 +103,13 @@ impl<'a> VmSession<'a> {
                 Nil => push!(self, Value::Nil),
                 True => push!(self, Value::Boolean(true)),
                 False => push!(self, Value::Boolean(false)),
+                Equal => {
+                    let b = pop!(self);
+                    let a = pop!(self);
+                    push!(self, Value::Boolean(a == b));
+                }
+                Greater => binary_op!(self, >),
+                Less => binary_op!(self, <),
                 Add => binary_op!(self, +),
                 Subtract => binary_op!(self, -),
                 Multiply => binary_op!(self, *),
