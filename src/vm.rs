@@ -1,6 +1,7 @@
 use crate::chunk::{Chunk, OpCode};
 use crate::compile::Compiler;
 use crate::value::Value;
+use crate::Error;
 use log::Level;
 use num_traits::FromPrimitive;
 use std::fmt::Write;
@@ -55,10 +56,27 @@ macro_rules! pop {
 
 macro_rules! binary_op {
     ($me: expr, $op: tt) => {{
-        let b = pop!($me).as_double();
-        let a = pop!($me).as_double();
-        push!($me, Value::Double(a $op b));
+        let b = pop!($me);
+        let a = pop!($me);
+        if let (Some(a), Some(b)) = (a.as_double(), b.as_double()) {
+            push!($me, Value::Double(a $op b));
+        } else {
+            push!($me, a);
+            push!($me, b);
+            runtime_error!($me, "Operands must be numbers.");
+        }
     }}
+}
+
+macro_rules! runtime_error {
+    ($self: expr, $fmt: literal $(, $($args: tt)* )?) => {
+        println!($fmt, $($args)*);
+        let i = $self.ip - 1;
+        let line = $self.chunk.lines[i];
+        println!("[line: {}] in script", line);
+        $self.reset_stack();
+        return Err(Error::Runtime);
+    }
 }
 
 impl<'a> VmSession<'a> {
@@ -87,8 +105,13 @@ impl<'a> VmSession<'a> {
                 Multiply => binary_op!(self, *),
                 Divide => binary_op!(self, /),
                 Negate => {
-                    let value = pop!(self).as_double();
-                    push!(self, Value::Double(-value));
+                    let value = pop!(self);
+                    if let Some(value) = value.as_double() {
+                        push!(self, Value::Double(-value));
+                    } else {
+                        push!(self, value);
+                        runtime_error!(self, "Operand must be a number.");
+                    }
                 }
                 Return => {
                     println!("{}", pop!(self));
@@ -112,5 +135,9 @@ impl<'a> VmSession<'a> {
 
     fn read_constant(&mut self) -> Value {
         self.chunk.values[self.read_byte().unwrap() as usize].clone()
+    }
+
+    fn reset_stack(&mut self) {
+        self.vm.stack.clear();
     }
 }

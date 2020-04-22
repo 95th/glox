@@ -1,18 +1,19 @@
 use std::fmt;
 
-macro_rules! get {
-    ($expression:expr, $( $pattern:pat )|+ $( if $guard: expr )?, $val: expr) => {
-        match $expression {
-            $( $pattern )|+ $( if $guard )? => $val,
-            _ => panic! {
-                "Expression didn't match. Expected: {}, Actual: {:?}",
-                stringify! {
-                    $( $pattern )|+ $( if $guard )?
-                },
-                $expression
-            },
+macro_rules! __impl_accessors {
+    ($is_fn: ident, $pat: pat, $as_fn: ident, $as_ty: ty, $val: expr) => {
+        #[allow(unused_variables)]
+        pub fn $is_fn(&self) -> bool {
+            matches!(self, $pat)
         }
-    }
+
+        pub fn $as_fn(&self) -> Option<$as_ty> {
+            match self {
+                $pat => Some($val),
+                _ => None,
+            }
+        }
+    };
 }
 
 #[derive(Debug, Clone)]
@@ -23,16 +24,11 @@ pub enum Value {
 }
 
 impl Value {
+    __impl_accessors!(is_boolean, Self::Boolean(v), as_boolean, bool, *v);
+    __impl_accessors!(is_double, Self::Double(v), as_double, f64, *v);
+
     pub fn is_nil(&self) -> bool {
         matches!(self, Self::Nil)
-    }
-
-    pub fn as_boolean(&self) -> bool {
-        get!(self, Self::Boolean(v), *v)
-    }
-
-    pub fn as_double(&self) -> f64 {
-        get!(self, Self::Double(v), *v)
     }
 }
 
