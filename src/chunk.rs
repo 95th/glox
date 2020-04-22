@@ -5,10 +5,14 @@ use num_derive::{FromPrimitive, ToPrimitive};
 #[repr(u8)]
 pub enum OpCode {
     Constant,
+    Nil,
+    True,
+    False,
     Add,
     Subtract,
     Multiply,
     Divide,
+    Not,
     Negate,
     Return,
 }

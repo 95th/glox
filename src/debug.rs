@@ -32,7 +32,7 @@ impl Chunk {
         use OpCode::*;
 
         match opcode {
-            Return | Negate | Add | Subtract | Multiply | Divide => {
+            Return | Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not => {
                 self.simple_instr(opcode, offset, buf)
             }
             Constant => self.constant_instr(opcode, offset, buf),

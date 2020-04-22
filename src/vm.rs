@@ -100,10 +100,17 @@ impl<'a> VmSession<'a> {
                     let constant = self.read_constant();
                     push!(self, constant);
                 }
+                Nil => push!(self, Value::Nil),
+                True => push!(self, Value::Boolean(true)),
+                False => push!(self, Value::Boolean(false)),
                 Add => binary_op!(self, +),
                 Subtract => binary_op!(self, -),
                 Multiply => binary_op!(self, *),
                 Divide => binary_op!(self, /),
+                Not => {
+                    let b = is_falsey(pop!(self));
+                    push!(self, Value::Boolean(b));
+                }
                 Negate => {
                     let value = pop!(self);
                     if let Some(value) = value.as_double() {
@@ -140,4 +147,8 @@ impl<'a> VmSession<'a> {
     fn reset_stack(&mut self) {
         self.vm.stack.clear();
     }
+}
+
+fn is_falsey(value: Value) -> bool {
+    matches!(value, Value::Nil | Value::Boolean(true))
 }

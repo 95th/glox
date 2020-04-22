@@ -109,7 +109,7 @@ impl<'a> Compiler<'a> {
             Semicolon => p!(),
             Slash => p!(None, Some binary, Factor),
             Star => p!(None, Some binary, Factor),
-            Bang => p!(),
+            Bang => p!(Some unary, None, None),
             BangEqual => p!(),
             Equal => p!(),
             EqualEqual => p!(),
@@ -123,21 +123,30 @@ impl<'a> Compiler<'a> {
             And => p!(),
             Class => p!(),
             Else => p!(),
-            False => p!(),
+            False => p!(Some literal, None, None),
             For => p!(),
             Fun => p!(),
             If => p!(),
-            Nil => p!(),
+            Nil => p!(Some literal, None, None),
             Or => p!(),
             Print => p!(),
             Return => p!(),
             Super => p!(),
             This => p!(),
-            True => p!(),
+            True => p!(Some literal, None, None),
             Var => p!(),
             While => p!(),
             Error => p!(),
             Eof => p!(),
+        }
+    }
+
+    fn literal(&mut self) {
+        match self.parser.previous.kind {
+            TokenKind::False => self.emit_op(OpCode::False),
+            TokenKind::Nil => self.emit_op(OpCode::Nil),
+            TokenKind::True => self.emit_op(OpCode::True),
+            _ => unreachable!(),
         }
     }
 
@@ -165,6 +174,7 @@ impl<'a> Compiler<'a> {
 
         // Emit the operator instruction
         match operator {
+            TokenKind::Bang => self.emit_op(OpCode::Not),
             TokenKind::Minus => self.emit_op(OpCode::Negate),
             _ => unreachable!(),
         }
