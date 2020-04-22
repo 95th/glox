@@ -55,9 +55,9 @@ macro_rules! pop {
 
 macro_rules! binary_op {
     ($me: expr, $op: tt) => {{
-        let b = pop!($me);
-        let a = pop!($me);
-        push!($me, a $op b);
+        let b = pop!($me).as_double().unwrap();
+        let a = pop!($me).as_double().unwrap();
+        push!($me, Value::Double(a $op b));
     }}
 }
 
@@ -87,8 +87,8 @@ impl<'a> VmSession<'a> {
                 Multiply => binary_op!(self, *),
                 Divide => binary_op!(self, /),
                 Negate => {
-                    let value = pop!(self);
-                    push!(self, -value);
+                    let value = pop!(self).as_double().unwrap();
+                    push!(self, Value::Double(-value));
                 }
                 Return => {
                     println!("{}", pop!(self));
@@ -111,6 +111,6 @@ impl<'a> VmSession<'a> {
     }
 
     fn read_constant(&mut self) -> Value {
-        self.chunk.values[self.read_byte().unwrap() as usize]
+        self.chunk.values[self.read_byte().unwrap() as usize].clone()
     }
 }

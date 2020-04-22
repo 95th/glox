@@ -144,7 +144,7 @@ impl<'a> Compiler<'a> {
     fn number(&mut self) {
         let value = self.parser.previous.lexeme_str().parse();
         match value {
-            Ok(v) => self.emit_constant(v),
+            Ok(v) => self.emit_constant(Value::Double(v)),
             Err(_) => {
                 self.parser.error("Not a valid number");
                 return;
