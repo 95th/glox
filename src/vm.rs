@@ -55,8 +55,8 @@ macro_rules! pop {
 
 macro_rules! binary_op {
     ($me: expr, $op: tt) => {{
-        let b = pop!($me).as_double().unwrap();
-        let a = pop!($me).as_double().unwrap();
+        let b = pop!($me).as_double();
+        let a = pop!($me).as_double();
         push!($me, Value::Double(a $op b));
     }}
 }
@@ -87,7 +87,7 @@ impl<'a> VmSession<'a> {
                 Multiply => binary_op!(self, *),
                 Divide => binary_op!(self, /),
                 Negate => {
-                    let value = pop!(self).as_double().unwrap();
+                    let value = pop!(self).as_double();
                     push!(self, Value::Double(-value));
                 }
                 Return => {

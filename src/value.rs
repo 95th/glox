@@ -1,10 +1,16 @@
 use std::fmt;
 
-macro_rules! if_matches {
+macro_rules! get {
     ($expression:expr, $( $pattern:pat )|+ $( if $guard: expr )?, $val: expr) => {
         match $expression {
-            $( $pattern )|+ $( if $guard )? => Some($val),
-            _ => None
+            $( $pattern )|+ $( if $guard )? => $val,
+            _ => panic! {
+                "Expression didn't match. Expected: {}, Actual: {:?}",
+                stringify! {
+                    $( $pattern )|+ $( if $guard )?
+                },
+                $expression
+            },
         }
     }
 }
@@ -21,12 +27,12 @@ impl Value {
         matches!(self, Self::Nil)
     }
 
-    pub fn as_boolean(&self) -> Option<bool> {
-        if_matches!(self, Self::Boolean(v), v).cloned()
+    pub fn as_boolean(&self) -> bool {
+        get!(self, Self::Boolean(v), *v)
     }
 
-    pub fn as_double(&self) -> Option<f64> {
-        if_matches!(self, Self::Double(v), v).cloned()
+    pub fn as_double(&self) -> f64 {
+        get!(self, Self::Double(v), *v)
     }
 }
 
