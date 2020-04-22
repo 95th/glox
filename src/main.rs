@@ -1,6 +1,6 @@
 use clap::{App, Arg};
-use glox::chunk::{Chunk, OpCode};
-use glox::vm::{InterpretError::*, InterpretResult, Vm};
+use glox::vm::Vm;
+use glox::Error;
 
 fn main() {
     env_logger::init();
@@ -15,30 +15,6 @@ fn main() {
         Some(file) => run_file(file),
         None => repl(),
     }
-
-    let mut vm = Vm::new();
-    let mut chunk = Chunk::new();
-
-    chunk.push_instr(OpCode::Constant, 123);
-    let constant = chunk.push_const(1.2);
-    chunk.push_chunk(constant as u8, 123);
-
-    chunk.push_instr(OpCode::Constant, 123);
-    let constant = chunk.push_const(3.4);
-    chunk.push_chunk(constant as u8, 123);
-
-    chunk.push_instr(OpCode::Add, 123);
-
-    chunk.push_instr(OpCode::Constant, 123);
-    let constant = chunk.push_const(5.6);
-    chunk.push_chunk(constant as u8, 123);
-
-    chunk.push_instr(OpCode::Divide, 123);
-    chunk.push_instr(OpCode::Negate, 123);
-
-    chunk.push_instr(OpCode::Return, 123);
-
-    vm.interpret(&chunk).unwrap();
 }
 
 fn run_file(path: &str) {
@@ -49,27 +25,25 @@ fn run_file(path: &str) {
             std::process::exit(74);
         }
     };
-    match interpret(&source) {
+    let mut vm = Vm::new();
+    match vm.interpret(&source) {
         Ok(()) => {}
-        Err(Compile) => std::process::exit(65),
-        Err(Runtime) => std::process::exit(70),
+        Err(Error::Compile) => std::process::exit(65),
+        Err(Error::Runtime) => std::process::exit(70),
     }
 }
 
 fn repl() {
+    let mut vm = Vm::new();
     let mut editor = rustyline::Editor::<()>::new();
     while let Ok(line) = editor.readline("> ") {
         if line == "exit" {
             break;
         }
-        match interpret(&line) {
+        match vm.interpret(&line) {
             Ok(()) => {}
-            Err(Compile) => println!("Unable to compile: {}", line),
-            Err(Runtime) => println!("Runtime error"),
+            Err(Error::Compile) => println!("Unable to compile: {}", line),
+            Err(Error::Runtime) => println!("Runtime error"),
         }
     }
-}
-
-fn interpret(source: &str) -> InterpretResult<()> {
-    todo!()
 }

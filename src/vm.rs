@@ -1,16 +1,9 @@
 use crate::chunk::{Chunk, OpCode};
+use crate::compile::Compiler;
 use crate::value::Value;
 use log::Level;
 use num_traits::FromPrimitive;
 use std::fmt::Write;
-
-#[derive(Debug)]
-pub enum InterpretError {
-    Compile,
-    Runtime,
-}
-
-pub type InterpretResult<T> = Result<T, InterpretError>;
 
 pub struct Vm {
     stack: Vec<Value>,
@@ -24,12 +17,11 @@ impl Vm {
         }
     }
 
-    pub fn interpret(&mut self, chunk: &Chunk) -> InterpretResult<()> {
-        let mut session = VmSession {
-            vm: self,
-            chunk,
-            ip: 0,
-        };
+    pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
+        let mut chunk = Chunk::new();
+        Compiler::new(source, &mut chunk).compile()?;
+
+        let mut session = VmSession::new(self, &chunk);
         session.run()
     }
 
@@ -70,7 +62,11 @@ macro_rules! binary_op {
 }
 
 impl<'a> VmSession<'a> {
-    fn run(&mut self) -> InterpretResult<()> {
+    fn new(vm: &'a mut Vm, chunk: &'a Chunk) -> Self {
+        Self { vm, chunk, ip: 0 }
+    }
+
+    fn run(&mut self) -> crate::Result<()> {
         use OpCode::*;
 
         self.vm.stack.clear();
