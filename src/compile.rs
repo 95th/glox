@@ -489,9 +489,12 @@ impl<'a> Scanner<'a> {
     }
 
     fn identifier(&mut self) -> Token<'a> {
-        while let Some(c) = self.peek() {
-            if is_alpha(c) || is_digit(c) {
-                self.advance();
+        loop {
+            match self.peek() {
+                Some(c) if is_alpha(c) || is_digit(c) => {
+                    self.advance();
+                }
+                _ => break,
             }
         }
 
