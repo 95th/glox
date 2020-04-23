@@ -189,17 +189,18 @@ impl<'a> Compiler<'a> {
         self.parse_precendence(rule.precedence.next_higher().unwrap());
 
         // Emit the operator instruction
+        use TokenKind::*;
         match operator {
-            TokenKind::BangEqual => self.emit_op2(OpCode::Equal, OpCode::Not),
-            TokenKind::EqualEqual => self.emit_op(OpCode::Equal),
-            TokenKind::Greater => self.emit_op(OpCode::Greater),
-            TokenKind::GreaterEqual => self.emit_op2(OpCode::Less, OpCode::Not),
-            TokenKind::Less => self.emit_op(OpCode::Less),
-            TokenKind::LessEqual => self.emit_op2(OpCode::Greater, OpCode::Not),
-            TokenKind::Plus => self.emit_op(OpCode::Add),
-            TokenKind::Minus => self.emit_op(OpCode::Subtract),
-            TokenKind::Star => self.emit_op(OpCode::Multiply),
-            TokenKind::Slash => self.emit_op(OpCode::Divide),
+            BangEqual => self.emit_op2(OpCode::Equal, OpCode::Not),
+            EqualEqual => self.emit_op(OpCode::Equal),
+            Greater => self.emit_op(OpCode::Greater),
+            GreaterEqual => self.emit_op2(OpCode::Less, OpCode::Not),
+            Less => self.emit_op(OpCode::Less),
+            LessEqual => self.emit_op2(OpCode::Greater, OpCode::Not),
+            Plus => self.emit_op(OpCode::Add),
+            Minus => self.emit_op(OpCode::Subtract),
+            Star => self.emit_op(OpCode::Multiply),
+            Slash => self.emit_op(OpCode::Divide),
             _ => unreachable!(),
         }
     }
