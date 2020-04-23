@@ -32,12 +32,14 @@ macro_rules! impl_as_mut {
 }
 
 macro_rules! impl_from {
-    ($ty: ty, $variant: ident) => {
-        impl From<$ty> for Value {
-            fn from(val: $ty) -> Self {
-                Self::$variant(val)
+    ($($val: ident : $ty: ty => $expr: expr),+) => {
+        $(
+            impl From<$ty> for Value {
+                fn from($val: $ty) -> Self {
+                    $expr
+                }
             }
-        }
+        )+
     };
 }
 
@@ -53,17 +55,25 @@ impl Value {
     impl_is!(is_nil, Self::Nil);
     impl_is!(is_boolean, Self::Boolean(_));
     impl_is!(is_double, Self::Double(_));
-    impl_is!(is_object, Self::Object(_));
+    impl_is!(is_string, Self::Object(Object::String(_)));
 
     impl_as!(as_boolean, Self::Boolean(x), *x, bool);
     impl_as!(as_double, Self::Double(x), *x, f64);
-    impl_as!(as_obj, Self::Object(x), x, &Object);
-    impl_as_mut!(as_obj_mut, Self::Object(x), x, &mut Object);
+    impl_as!(as_string, Self::Object(Object::String(x)), x, &String);
+
+    impl_as_mut!(
+        as_string_mut,
+        Self::Object(Object::String(x)),
+        x,
+        &mut String
+    );
 }
 
-impl_from!(bool, Boolean);
-impl_from!(f64, Double);
-impl_from!(Object, Object);
+impl_from! {
+    x: bool => Self::Boolean(x),
+    x: f64 => Self::Double(x),
+    x: String => Self::Object(Object::String(x))
+}
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -71,7 +81,7 @@ impl fmt::Display for Value {
             Self::Nil => write!(f, "nil"),
             Self::Boolean(b) => write!(f, "{}", b),
             Self::Double(d) => write!(f, "{}", d),
-            Self::Object(o) => write!(f, "Object[{:?}]", o),
+            Self::Object(o) => write!(f, "{}", o),
         }
     }
 }

@@ -118,7 +118,7 @@ impl<'a> Compiler<'a> {
             Less => p!(None, Some binary, Comparison),
             LessEqual => p!(None, Some binary, Comparison),
             Identifier => p!(),
-            String => p!(),
+            String => p!(Some string, None, None),
             Number => p!(Some number, None, None),
             And => p!(),
             Class => p!(),
@@ -139,6 +139,12 @@ impl<'a> Compiler<'a> {
             Error => p!(),
             Eof => p!(),
         }
+    }
+
+    fn string(&mut self) {
+        let s = self.parser.previous.lexeme_str();
+        let s = &s[1..s.len() - 1];
+        self.emit_constant(s.to_string().into());
     }
 
     fn literal(&mut self) {

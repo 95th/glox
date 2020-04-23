@@ -110,7 +110,20 @@ impl<'a> VmSession<'a> {
                 }
                 Greater => binary_op!(self, >),
                 Less => binary_op!(self, <),
-                Add => binary_op!(self, +),
+                Add => {
+                    let b = pop!(self);
+                    let mut a = pop!(self);
+                    if let (Some(a), Some(b)) = (a.as_double(), b.as_double()) {
+                        push!(self, Value::from(a + b));
+                    } else if let (Some(sa), Some(sb)) = (a.as_string_mut(), b.as_string()) {
+                        *sa += sb;
+                        push!(self, a);
+                    } else {
+                        push!(self, a);
+                        push!(self, b);
+                        runtime_error!(self, "Operands must be two numbers or two strings.");
+                    }
+                }
                 Subtract => binary_op!(self, -),
                 Multiply => binary_op!(self, *),
                 Divide => binary_op!(self, /),
