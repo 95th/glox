@@ -41,9 +41,11 @@ fn repl() {
             break;
         }
         match vm.interpret(&line) {
-            Ok(()) => {}
+            Ok(()) => continue,
             Err(Error::Compile) => println!("Unable to compile: {}", line),
             Err(Error::Runtime) => println!("Runtime error"),
         }
+
+        vm.clear();
     }
 }

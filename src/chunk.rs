@@ -9,6 +9,8 @@ pub enum OpCode {
     True,
     False,
     Pop,
+    GetGlobal,
+    DefineGlobal,
     Equal,
     Greater,
     Less,
@@ -47,5 +49,11 @@ impl Chunk {
         let len = self.values.len();
         self.values.push(value);
         len
+    }
+
+    pub fn clear(&mut self) {
+        self.code.clear();
+        self.values.clear();
+        self.lines.clear();
     }
 }

@@ -5,9 +5,14 @@ use crate::value::Value;
 use crate::Error;
 use log::Level;
 use num_traits::FromPrimitive;
+use std::collections::HashMap;
 
 pub struct Vm {
     stack: Vec<Value>,
+    chunk: Chunk,
+    strings: StringPool,
+    globals: HashMap<u32, Value>,
+    ip: usize,
 }
 
 impl Vm {
@@ -15,15 +20,16 @@ impl Vm {
         const STACK_SIZE: usize = 256;
         Self {
             stack: Vec::with_capacity(STACK_SIZE),
+            chunk: Chunk::new(),
+            strings: StringPool::new(),
+            globals: HashMap::new(),
+            ip: 0,
         }
     }
 
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
-        let mut chunk = Chunk::new();
-        let mut strings = StringPool::new();
-        Compiler::new(source, &mut chunk, &mut strings).compile()?;
-        let mut session = VmSession::new(self, &chunk, &mut strings);
-        session.run()
+        Compiler::new(source, &mut self.chunk, &mut self.strings).compile()?;
+        self.run()
     }
 
     fn print_stack(&self, strings: &StringPool) {
@@ -36,24 +42,25 @@ impl Vm {
 
         trace!("{}", buf);
     }
-}
 
-struct VmSession<'a> {
-    vm: &'a mut Vm,
-    chunk: &'a Chunk,
-    strings: &'a mut StringPool,
-    ip: usize,
+    pub fn clear(&mut self) {
+        self.stack.clear();
+        self.chunk.clear();
+        self.globals.clear();
+        self.strings.clear();
+        self.ip = 0;
+    }
 }
 
 macro_rules! push {
     ($me: expr, $value: expr) => {
-        $me.vm.stack.push($value);
+        $me.stack.push($value);
     };
 }
 
 macro_rules! pop {
     ($me: expr) => {
-        $me.vm.stack.pop().unwrap()
+        $me.stack.pop().unwrap()
     };
 }
 
@@ -73,34 +80,23 @@ macro_rules! binary_op {
 
 macro_rules! runtime_error {
     ($self: expr, $fmt: literal $(, $($args: tt)* )?) => {
-        println!($fmt, $($args)*);
+        println!($fmt $(, $($args)* )? );
         let i = $self.ip - 1;
         let line = $self.chunk.lines[i];
         println!("[line: {}] in script", line);
-        $self.reset_stack();
+        $self.stack.clear();
         return Err(Error::Runtime);
     }
 }
 
-impl<'a> VmSession<'a> {
-    fn new(vm: &'a mut Vm, chunk: &'a Chunk, strings: &'a mut StringPool) -> Self {
-        Self {
-            vm,
-            chunk,
-            ip: 0,
-            strings,
-        }
-    }
-
+impl Vm {
     fn run(&mut self) -> crate::Result<()> {
         use OpCode::*;
 
-        self.vm.stack.clear();
-
         while let Some(instr) = self.read_instr() {
             if log_enabled!(Level::Trace) {
-                self.vm.print_stack(self.strings);
-                self.chunk.disassemble_instr(self.ip - 1, self.strings);
+                self.print_stack(&self.strings);
+                self.chunk.disassemble_instr(self.ip - 1, &self.strings);
             }
 
             match instr {
@@ -113,6 +109,20 @@ impl<'a> VmSession<'a> {
                 False => push!(self, Value::Boolean(false)),
                 Pop => {
                     pop!(self);
+                }
+                GetGlobal => {
+                    let name = self.read_constant();
+                    let name = name.as_string().unwrap();
+                    if let Some(value) = self.globals.get(&name) {
+                        push!(self, value.clone());
+                    } else {
+                        runtime_error!(self, "Undefined variable {}", self.strings.lookup(name));
+                    }
+                }
+                DefineGlobal => {
+                    let name = self.read_constant();
+                    let name = name.as_string().unwrap();
+                    self.globals.insert(name, pop!(self));
                 }
                 Equal => {
                     let b = pop!(self);
@@ -156,7 +166,7 @@ impl<'a> VmSession<'a> {
                 }
                 Print => {
                     let mut s = String::new();
-                    pop!(self).write(&mut s, self.strings).unwrap();
+                    pop!(self).write(&mut s, &self.strings).unwrap();
                     println!("{}", s);
                 }
                 Return => return Ok(()),
@@ -179,10 +189,6 @@ impl<'a> VmSession<'a> {
     fn read_constant(&mut self) -> Value {
         let idx = self.read_byte().unwrap() as usize;
         self.chunk.values[idx].clone()
-    }
-
-    fn reset_stack(&mut self) {
-        self.vm.stack.clear();
     }
 }
 

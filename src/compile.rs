@@ -35,11 +35,46 @@ impl<'a> Compiler<'a> {
     }
 
     fn declaration(&mut self) {
-        self.statement();
+        if self.matches(TokenKind::Var) {
+            self.var_decl();
+        } else {
+            self.statement();
+        }
 
         if self.parser.panic_mode {
             self.synchronize();
         }
+    }
+
+    fn var_decl(&mut self) {
+        let global = self.parse_var("Expect variable name");
+        if self.matches(TokenKind::Equal) {
+            self.expression();
+        } else {
+            self.emit_op(OpCode::Nil);
+        }
+
+        self.consume(
+            TokenKind::Semicolon,
+            "Expect ';' after variable declaration",
+        );
+
+        self.define_var(global);
+    }
+
+    fn define_var(&mut self, global: u8) {
+        self.emit_op(OpCode::DefineGlobal);
+        self.emit_byte(global);
+    }
+
+    fn parse_var(&mut self, msg: &str) -> u8 {
+        self.consume(TokenKind::Identifier, msg);
+        self.identifier_constant(self.parser.previous.lexeme_str())
+    }
+
+    fn identifier_constant(&mut self, s: &str) -> u8 {
+        let s = self.strings.intern(s);
+        self.make_constant(s.into())
     }
 
     fn statement(&mut self) {
@@ -151,7 +186,7 @@ impl<'a> Compiler<'a> {
             GreaterEqual => p!(None, Some binary, Comparison),
             Less => p!(None, Some binary, Comparison),
             LessEqual => p!(None, Some binary, Comparison),
-            Identifier => p!(),
+            Identifier => p!(Some variable, None, None),
             String => p!(Some string, None, None),
             Number => p!(Some number, None, None),
             And => p!(),
@@ -173,6 +208,16 @@ impl<'a> Compiler<'a> {
             Error => p!(),
             Eof => p!(),
         }
+    }
+
+    fn variable(&mut self) {
+        self.named_variable(self.parser.previous.lexeme_str());
+    }
+
+    fn named_variable(&mut self, name: &str) {
+        let arg = self.identifier_constant(name);
+        self.emit_op(OpCode::GetGlobal);
+        self.emit_byte(arg);
     }
 
     fn string(&mut self) {
@@ -618,6 +663,7 @@ fn is_digit(c: u8) -> bool {
     matches!(c, b'0'..=b'9')
 }
 
+#[derive(Clone)]
 pub struct Token<'a> {
     kind: TokenKind,
     lexeme: &'a [u8],

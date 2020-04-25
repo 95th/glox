@@ -42,6 +42,13 @@ impl StringPool {
         self.vec[id as usize].get()
     }
 
+    pub fn clear(&mut self) {
+        self.map.clear();
+        self.vec.clear();
+        self.curr_buf.clear();
+        self.full.clear();
+    }
+
     fn alloc(&mut self, name: &str) -> Ptr<str> {
         let cap = self.curr_buf.capacity();
         if cap < self.curr_buf.len() + name.len() {
