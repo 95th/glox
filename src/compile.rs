@@ -21,8 +21,7 @@ impl<'a> Compiler<'a> {
 
     pub fn compile(mut self) -> crate::Result<()> {
         self.advance();
-        self.expression();
-        self.consume(TokenKind::Eof, "Expect end of expression");
+        self.declaration();
         self.end_compile();
 
         if self.parser.had_error {
@@ -32,17 +31,49 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn advance(&mut self) {
-        std::mem::swap(&mut self.parser.previous, &mut self.parser.current);
+    fn declaration(&mut self) {
+        self.statement();
 
-        loop {
-            self.parser.current = self.scanner.scan_token();
-            if let TokenKind::Error = self.parser.current.kind {
-                let msg = self.parser.current.lexeme_str();
-                self.parser.error_at_current(msg);
-            } else {
-                break;
+        if self.parser.panic_mode {
+            self.synchronize();
+        }
+    }
+
+    fn statement(&mut self) {
+        if self.matches(TokenKind::Print) {
+            self.print_statement();
+        } else {
+            self.expression_statement();
+        }
+    }
+
+    fn print_statement(&mut self) {
+        self.expression();
+        self.consume(TokenKind::Semicolon, "Expect ';' after value");
+        self.emit_op(OpCode::Print);
+    }
+
+    fn expression_statement(&mut self) {
+        self.expression();
+        self.consume(TokenKind::Semicolon, "Expect ';' after expression");
+        self.emit_op(OpCode::Pop);
+    }
+
+    fn synchronize(&mut self) {
+        use TokenKind::*;
+        self.parser.panic_mode = false;
+
+        while self.parser.current.kind != Eof {
+            if let Semicolon = self.parser.previous.kind {
+                return;
             }
+
+            match self.parser.current.kind {
+                Class | Fun | Var | For | If | While | Print | Return => return,
+                _ => {}
+            }
+
+            self.advance();
         }
     }
 
@@ -211,6 +242,32 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn matches(&mut self, kind: TokenKind) -> bool {
+        if !self.check(kind) {
+            return false;
+        }
+        self.advance();
+        true
+    }
+
+    fn check(&self, kind: TokenKind) -> bool {
+        self.parser.current.kind == kind
+    }
+
+    fn advance(&mut self) {
+        std::mem::swap(&mut self.parser.previous, &mut self.parser.current);
+
+        loop {
+            self.parser.current = self.scanner.scan_token();
+            if let TokenKind::Error = self.parser.current.kind {
+                let msg = self.parser.current.lexeme_str();
+                self.parser.error_at_current(msg);
+            } else {
+                break;
+            }
+        }
+    }
+
     fn consume(&mut self, kind: TokenKind, msg: &str) {
         if self.parser.current.kind == kind {
             self.advance();
@@ -250,12 +307,17 @@ impl<'a> Compiler<'a> {
     }
 
     fn emit_constant(&mut self, value: Value) {
+        let constant = self.make_constant(value);
+        self.emit_byte2(OpCode::Constant as u8, constant as u8);
+    }
+
+    fn make_constant(&mut self, value: Value) -> u8 {
         let mut constant = self.chunk.push_const(value);
         if constant > u8::max_value() as usize {
             self.parser.error("Too many constants in one chunk");
             constant = 0;
         }
-        self.emit_byte2(OpCode::Constant as u8, constant as u8);
+        constant as u8
     }
 }
 

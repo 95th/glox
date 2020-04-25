@@ -33,7 +33,7 @@ impl Chunk {
 
         match opcode {
             Return | Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not
-            | Equal | Greater | Less => self.simple_instr(opcode, offset, buf),
+            | Equal | Greater | Less | Print | Pop => self.simple_instr(opcode, offset, buf),
             Constant => self.constant_instr(opcode, offset, buf),
         }
     }

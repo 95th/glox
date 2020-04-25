@@ -103,6 +103,9 @@ impl<'a> VmSession<'a> {
                 Nil => push!(self, Value::Nil),
                 True => push!(self, Value::Boolean(true)),
                 False => push!(self, Value::Boolean(false)),
+                Pop => {
+                    pop!(self);
+                }
                 Equal => {
                     let b = pop!(self);
                     let a = pop!(self);
@@ -140,10 +143,8 @@ impl<'a> VmSession<'a> {
                         runtime_error!(self, "Operand must be a number.");
                     }
                 }
-                Return => {
-                    println!("{}", pop!(self));
-                    return Ok(());
-                }
+                Print => println!("{}", pop!(self)),
+                Return => return Ok(()),
             }
         }
 
