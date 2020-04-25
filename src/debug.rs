@@ -38,12 +38,20 @@ impl Chunk {
             Constant | GetGlobal | SetGlobal | DefineGlobal => {
                 self.constant_instr(opcode, offset, buf, strings)
             }
+            SetLocal | GetLocal => self.byte_instr(opcode, buf, offset),
         }
     }
 
     fn simple_instr(&self, opcode: OpCode, offset: usize, buf: String) -> usize {
         trace!("{}{:?}", buf, opcode);
         offset + 1
+    }
+
+    fn byte_instr(&self, opcode: OpCode, mut buf: String, offset: usize) -> usize {
+        let slot = self.code[offset + 1];
+        write!(buf, "{:-16?} {:4}", opcode, slot).unwrap();
+        trace!("{}", buf);
+        offset + 2
     }
 
     fn constant_instr(

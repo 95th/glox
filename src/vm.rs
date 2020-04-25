@@ -116,6 +116,10 @@ impl Vm {
                 Pop => {
                     pop!(self);
                 }
+                GetLocal => {
+                    let slot = self.read_byte().unwrap();
+                    push!(self, self.stack[slot as usize].clone());
+                }
                 GetGlobal => {
                     let name = self.read_constant();
                     let name = name.as_string().unwrap();
@@ -124,6 +128,10 @@ impl Vm {
                     } else {
                         runtime_error!(self, "Undefined variable {}", self.strings.lookup(name));
                     }
+                }
+                SetLocal => {
+                    let slot = self.read_byte().unwrap();
+                    self.stack[slot as usize] = peek!(self).clone();
                 }
                 SetGlobal => {
                     let name = self.read_constant();

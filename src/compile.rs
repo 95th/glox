@@ -5,11 +5,18 @@ use log::Level;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 
+struct Local<'a> {
+    name: Token<'a>,
+    depth: isize,
+}
+
 pub struct Compiler<'a> {
     scanner: Scanner<'a>,
     parser: Parser<'a>,
     chunk: &'a mut Chunk,
     strings: &'a mut StringPool,
+    locals: Vec<Local<'a>>,
+    scope_depth: isize,
 }
 
 impl<'a> Compiler<'a> {
@@ -19,6 +26,8 @@ impl<'a> Compiler<'a> {
             parser: Parser::new(),
             chunk,
             strings,
+            locals: Vec::new(),
+            scope_depth: 0,
         }
     }
 
@@ -36,7 +45,7 @@ impl<'a> Compiler<'a> {
 
     fn declaration(&mut self) {
         if self.matches(TokenKind::Var) {
-            self.var_decl();
+            self.var_declaration();
         } else {
             self.statement();
         }
@@ -46,8 +55,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn var_decl(&mut self) {
-        let global = self.parse_var("Expect variable name");
+    fn var_declaration(&mut self) {
+        let global = self.parse_variable("Expect variable name");
         if self.matches(TokenKind::Equal) {
             self.expression();
         } else {
@@ -59,17 +68,59 @@ impl<'a> Compiler<'a> {
             "Expect ';' after variable declaration",
         );
 
-        self.define_var(global);
+        self.define_variable(global);
     }
 
-    fn define_var(&mut self, global: u8) {
+    fn parse_variable(&mut self, msg: &str) -> u8 {
+        self.consume(TokenKind::Identifier, msg);
+
+        self.declare_variable();
+        if self.scope_depth > 0 {
+            return 0;
+        }
+
+        self.identifier_constant(self.parser.previous.lexeme_str())
+    }
+
+    fn declare_variable(&mut self) {
+        // Globals are implicitly declared
+        if self.scope_depth == 0 {
+            return;
+        }
+
+        let already_declared = self
+            .locals
+            .iter()
+            .rev()
+            .take_while(|l| l.depth == -1 || l.depth == self.scope_depth)
+            .any(|l| self.parser.previous.lexeme == l.name.lexeme);
+
+        if already_declared {
+            self.parser
+                .error("Variable with this name already declared in this scope");
+        }
+
+        let name = self.parser.previous.clone();
+        self.add_local(name);
+    }
+
+    fn define_variable(&mut self, global: u8) {
+        if self.scope_depth > 0 {
+            self.mark_initialized();
+            return;
+        }
+
         self.emit_op(OpCode::DefineGlobal);
         self.emit_byte(global);
     }
 
-    fn parse_var(&mut self, msg: &str) -> u8 {
-        self.consume(TokenKind::Identifier, msg);
-        self.identifier_constant(self.parser.previous.lexeme_str())
+    fn add_local(&mut self, name: Token<'a>) {
+        let local = Local { name, depth: -1 };
+        self.locals.push(local);
+    }
+
+    fn mark_initialized(&mut self) {
+        self.locals.last_mut().unwrap().depth = self.scope_depth;
     }
 
     fn identifier_constant(&mut self, s: &str) -> u8 {
@@ -80,8 +131,37 @@ impl<'a> Compiler<'a> {
     fn statement(&mut self) {
         if self.matches(TokenKind::Print) {
             self.print_statement();
+        } else if self.matches(TokenKind::LeftBrace) {
+            self.begin_scope();
+            self.block();
+            self.end_scope();
         } else {
             self.expression_statement();
+        }
+    }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn block(&mut self) {
+        while !self.check(TokenKind::RightBrace) && !self.check(TokenKind::Eof) {
+            self.declaration();
+        }
+
+        self.consume(TokenKind::RightBrace, "Expect '}' after block");
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+
+        while let Some(local) = self.locals.pop() {
+            if local.depth > self.scope_depth {
+                self.emit_op(OpCode::Pop);
+            } else {
+                self.locals.push(local);
+                break;
+            }
         }
     }
 
@@ -220,15 +300,36 @@ impl<'a> Compiler<'a> {
     }
 
     fn named_variable(&mut self, name: &str, can_assign: bool) {
-        let arg = self.identifier_constant(name);
+        let (arg, get_op, set_op) = match self.resolve_local(name) {
+            Some(arg) => (arg, OpCode::GetLocal, OpCode::SetLocal),
+            None => {
+                let arg = self.identifier_constant(name);
+                (arg, OpCode::GetGlobal, OpCode::SetGlobal)
+            }
+        };
 
         if can_assign && self.matches(TokenKind::Equal) {
             self.expression();
-            self.emit_op(OpCode::SetGlobal);
+            self.emit_op(set_op);
         } else {
-            self.emit_op(OpCode::GetGlobal);
+            self.emit_op(get_op);
         }
-        self.emit_byte(arg);
+        self.emit_byte(arg as u8);
+    }
+
+    fn resolve_local(&mut self, name: &str) -> Option<u8> {
+        let parser = &mut self.parser;
+        self.locals.iter().enumerate().rev().find_map(|(i, l)| {
+            if l.name.lexeme == name.as_bytes() {
+                if l.depth == -1 {
+                    parser.error("Cannot read local variable in its own initializer");
+                }
+
+                Some(i as u8)
+            } else {
+                None
+            }
+        })
     }
 
     fn string(&mut self, _can_assign: bool) {
