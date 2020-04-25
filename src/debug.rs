@@ -35,7 +35,7 @@ impl Chunk {
         match opcode {
             Return | Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not
             | Equal | Greater | Less | Print | Pop => self.simple_instr(opcode, offset, buf),
-            Constant | GetGlobal | DefineGlobal => {
+            Constant | GetGlobal | SetGlobal | DefineGlobal => {
                 self.constant_instr(opcode, offset, buf, strings)
             }
         }

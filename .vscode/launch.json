@@ -16,7 +16,9 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "sample.lox"
+            ],
             "env": {
                 "RUST_LOG": "glox=trace"
             },

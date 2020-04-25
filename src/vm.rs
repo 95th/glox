@@ -53,27 +53,33 @@ impl Vm {
 }
 
 macro_rules! push {
-    ($me: expr, $value: expr) => {
-        $me.stack.push($value);
+    ($self: expr, $value: expr) => {
+        $self.stack.push($value);
     };
 }
 
 macro_rules! pop {
-    ($me: expr) => {
-        $me.stack.pop().unwrap()
+    ($self: expr) => {
+        $self.stack.pop().unwrap()
+    };
+}
+
+macro_rules! peek {
+    ($self: expr) => {
+        $self.stack.last().unwrap()
     };
 }
 
 macro_rules! binary_op {
-    ($me: expr, $op: tt) => {{
-        let b = pop!($me);
-        let a = pop!($me);
+    ($self: expr, $op: tt) => {{
+        let b = pop!($self);
+        let a = pop!($self);
         if let (Some(a), Some(b)) = (a.as_double(), b.as_double()) {
-            push!($me, Value::from(a $op b));
+            push!($self, Value::from(a $op b));
         } else {
-            push!($me, a);
-            push!($me, b);
-            runtime_error!($me, "Operands must be numbers.");
+            push!($self, a);
+            push!($self, b);
+            runtime_error!($self, "Operands must be numbers.");
         }
     }}
 }
@@ -115,6 +121,16 @@ impl Vm {
                     let name = name.as_string().unwrap();
                     if let Some(value) = self.globals.get(&name) {
                         push!(self, value.clone());
+                    } else {
+                        runtime_error!(self, "Undefined variable {}", self.strings.lookup(name));
+                    }
+                }
+                SetGlobal => {
+                    let name = self.read_constant();
+                    let name = name.as_string().unwrap();
+                    if self.globals.contains_key(&name) {
+                        let value = peek!(self).clone();
+                        self.globals.insert(name, value);
                     } else {
                         runtime_error!(self, "Undefined variable {}", self.strings.lookup(name));
                     }

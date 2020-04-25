@@ -10,6 +10,7 @@ pub enum OpCode {
     False,
     Pop,
     GetGlobal,
+    SetGlobal,
     DefineGlobal,
     Equal,
     Greater,

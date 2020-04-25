@@ -129,12 +129,17 @@ impl<'a> Compiler<'a> {
             }
         };
 
-        prefix_rule(self);
+        let can_assign = precedence <= Precedence::Assignment;
+        prefix_rule(self, can_assign);
 
         while precedence <= self.get_rule(self.parser.current.kind).precedence {
             self.advance();
             let infix_rule = self.get_rule(self.parser.previous.kind).infix.unwrap();
-            infix_rule(self);
+            infix_rule(self, can_assign);
+        }
+
+        if can_assign && self.matches(TokenKind::Equal) {
+            self.parser.error("Invalid assignment target");
         }
     }
 
@@ -210,23 +215,29 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn variable(&mut self) {
-        self.named_variable(self.parser.previous.lexeme_str());
+    fn variable(&mut self, can_assign: bool) {
+        self.named_variable(self.parser.previous.lexeme_str(), can_assign);
     }
 
-    fn named_variable(&mut self, name: &str) {
+    fn named_variable(&mut self, name: &str, can_assign: bool) {
         let arg = self.identifier_constant(name);
-        self.emit_op(OpCode::GetGlobal);
+
+        if can_assign && self.matches(TokenKind::Equal) {
+            self.expression();
+            self.emit_op(OpCode::SetGlobal);
+        } else {
+            self.emit_op(OpCode::GetGlobal);
+        }
         self.emit_byte(arg);
     }
 
-    fn string(&mut self) {
+    fn string(&mut self, _can_assign: bool) {
         let s = self.parser.previous.lexeme_str();
         let s = self.strings.intern(&s[1..s.len() - 1]);
         self.emit_constant(s.into());
     }
 
-    fn literal(&mut self) {
+    fn literal(&mut self, _can_assign: bool) {
         match self.parser.previous.kind {
             TokenKind::False => self.emit_op(OpCode::False),
             TokenKind::Nil => self.emit_op(OpCode::Nil),
@@ -235,7 +246,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn number(&mut self) {
+    fn number(&mut self, _can_assign: bool) {
         let value = self.parser.previous.lexeme_str().parse();
         match value {
             Ok(v) => self.emit_constant(Value::Double(v)),
@@ -246,12 +257,12 @@ impl<'a> Compiler<'a> {
         };
     }
 
-    fn grouping(&mut self) {
+    fn grouping(&mut self, _can_assign: bool) {
         self.expression();
         self.consume(TokenKind::RightParen, "Expect ')' after expression");
     }
 
-    fn unary(&mut self) {
+    fn unary(&mut self, _can_assign: bool) {
         let operator = self.parser.previous.kind;
 
         // Compile the operand
@@ -265,7 +276,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn binary(&mut self) {
+    fn binary(&mut self, _can_assign: bool) {
         // Remember the operator
         let operator = self.parser.previous.kind;
 
@@ -369,7 +380,7 @@ impl<'a> Compiler<'a> {
     }
 }
 
-type ParseFn<'a> = Box<dyn Fn(&mut Compiler<'a>)>;
+type ParseFn<'a> = Box<dyn Fn(&mut Compiler<'a>, bool)>;
 
 struct ParseRule<'a> {
     prefix: Option<ParseFn<'a>>,
