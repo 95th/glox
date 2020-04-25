@@ -1,4 +1,5 @@
 use crate::chunk::{Chunk, OpCode};
+use crate::intern::StringPool;
 use crate::value::Value;
 use log::Level;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -8,14 +9,16 @@ pub struct Compiler<'a> {
     scanner: Scanner<'a>,
     parser: Parser<'a>,
     chunk: &'a mut Chunk,
+    strings: &'a mut StringPool,
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(source: &'a str, chunk: &'a mut Chunk) -> Self {
+    pub fn new(source: &'a str, chunk: &'a mut Chunk, strings: &'a mut StringPool) -> Self {
         Self {
             scanner: Scanner::new(source.as_bytes()),
             parser: Parser::new(),
             chunk,
+            strings,
         }
     }
 
@@ -174,8 +177,8 @@ impl<'a> Compiler<'a> {
 
     fn string(&mut self) {
         let s = self.parser.previous.lexeme_str();
-        let s = &s[1..s.len() - 1];
-        self.emit_constant(s.to_string().into());
+        let s = self.strings.intern(&s[1..s.len() - 1]);
+        self.emit_constant(s.into());
     }
 
     fn literal(&mut self) {
@@ -289,7 +292,7 @@ impl<'a> Compiler<'a> {
     fn end_compile(&mut self) {
         self.emit_return();
         if log_enabled!(Level::Trace) {
-            self.chunk.disassemble("code");
+            self.chunk.disassemble("code", self.strings);
         }
     }
 

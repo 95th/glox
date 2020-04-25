@@ -4,6 +4,7 @@ extern crate log;
 pub mod chunk;
 pub mod compile;
 pub mod debug;
+mod intern;
 pub mod object;
 pub mod value;
 pub mod vm;

@@ -1,10 +1,10 @@
 use crate::chunk::{Chunk, OpCode};
 use crate::compile::Compiler;
+use crate::intern::StringPool;
 use crate::value::Value;
 use crate::Error;
 use log::Level;
 use num_traits::FromPrimitive;
-use std::fmt::Write;
 
 pub struct Vm {
     stack: Vec<Value>,
@@ -20,16 +20,18 @@ impl Vm {
 
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
         let mut chunk = Chunk::new();
-        Compiler::new(source, &mut chunk).compile()?;
-
-        let mut session = VmSession::new(self, &chunk);
+        let mut strings = StringPool::new();
+        Compiler::new(source, &mut chunk, &mut strings).compile()?;
+        let mut session = VmSession::new(self, &chunk, &mut strings);
         session.run()
     }
 
-    fn print_stack(&self) {
+    fn print_stack(&self, strings: &StringPool) {
         let mut buf = String::from("          ");
         for val in &self.stack {
-            write!(buf, "[ {} ]", val).unwrap();
+            buf.push_str("[ ");
+            val.write(&mut buf, strings).unwrap();
+            buf.push_str(" ]");
         }
 
         trace!("{}", buf);
@@ -39,6 +41,7 @@ impl Vm {
 struct VmSession<'a> {
     vm: &'a mut Vm,
     chunk: &'a Chunk,
+    strings: &'a mut StringPool,
     ip: usize,
 }
 
@@ -80,8 +83,13 @@ macro_rules! runtime_error {
 }
 
 impl<'a> VmSession<'a> {
-    fn new(vm: &'a mut Vm, chunk: &'a Chunk) -> Self {
-        Self { vm, chunk, ip: 0 }
+    fn new(vm: &'a mut Vm, chunk: &'a Chunk, strings: &'a mut StringPool) -> Self {
+        Self {
+            vm,
+            chunk,
+            ip: 0,
+            strings,
+        }
     }
 
     fn run(&mut self) -> crate::Result<()> {
@@ -91,8 +99,8 @@ impl<'a> VmSession<'a> {
 
         while let Some(instr) = self.read_instr() {
             if log_enabled!(Level::Trace) {
-                self.vm.print_stack();
-                self.chunk.disassemble_instr(self.ip - 1);
+                self.vm.print_stack(self.strings);
+                self.chunk.disassemble_instr(self.ip - 1, self.strings);
             }
 
             match instr {
@@ -115,12 +123,15 @@ impl<'a> VmSession<'a> {
                 Less => binary_op!(self, <),
                 Add => {
                     let b = pop!(self);
-                    let mut a = pop!(self);
+                    let a = pop!(self);
                     if let (Some(a), Some(b)) = (a.as_double(), b.as_double()) {
                         push!(self, Value::from(a + b));
-                    } else if let (Some(sa), Some(sb)) = (a.as_string_mut(), b.as_string()) {
-                        *sa += sb;
-                        push!(self, a);
+                    } else if let (Some(sa), Some(sb)) = (a.as_string(), b.as_string()) {
+                        let sa = self.strings.lookup(sa);
+                        let sb = self.strings.lookup(sb);
+                        let out = sa.to_string() + sb;
+                        let out = self.strings.intern(out);
+                        push!(self, out.into());
                     } else {
                         push!(self, a);
                         push!(self, b);
@@ -143,7 +154,11 @@ impl<'a> VmSession<'a> {
                         runtime_error!(self, "Operand must be a number.");
                     }
                 }
-                Print => println!("{}", pop!(self)),
+                Print => {
+                    let mut s = String::new();
+                    pop!(self).write(&mut s, self.strings).unwrap();
+                    println!("{}", s);
+                }
                 Return => return Ok(()),
             }
         }
@@ -162,7 +177,8 @@ impl<'a> VmSession<'a> {
     }
 
     fn read_constant(&mut self) -> Value {
-        self.chunk.values[self.read_byte().unwrap() as usize].clone()
+        let idx = self.read_byte().unwrap() as usize;
+        self.chunk.values[idx].clone()
     }
 
     fn reset_stack(&mut self) {

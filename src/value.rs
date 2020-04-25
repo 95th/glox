@@ -1,3 +1,4 @@
+use crate::intern::StringPool;
 use crate::object::Object;
 use std::fmt;
 
@@ -12,17 +13,6 @@ macro_rules! impl_is {
 macro_rules! impl_as {
     ($fn: ident, $pat: pat, $val: expr, $ty: ty) => {
         pub fn $fn(&self) -> Option<$ty> {
-             match self {
-                $pat => Some($val),
-                _ => None,
-            }
-        }
-    };
-}
-
-macro_rules! impl_as_mut {
-    ($fn: ident, $pat: pat, $val: expr, $ty: ty) => {
-        pub fn $fn(&mut self) -> Option<$ty> {
              match self {
                 $pat => Some($val),
                 _ => None,
@@ -59,29 +49,22 @@ impl Value {
 
     impl_as!(as_boolean, Self::Boolean(x), *x, bool);
     impl_as!(as_double, Self::Double(x), *x, f64);
-    impl_as!(as_string, Self::Object(Object::String(x)), x, &String);
-
-    impl_as_mut!(
-        as_string_mut,
-        Self::Object(Object::String(x)),
-        x,
-        &mut String
-    );
+    impl_as!(as_string, Self::Object(Object::String(x)), *x, u32);
 }
 
 impl_from! {
     x: bool => Self::Boolean(x),
     x: f64 => Self::Double(x),
-    x: String => Self::Object(Object::String(x))
+    x: u32 => Self::Object(Object::String(x))
 }
 
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Value {
+    pub fn write(&self, mut f: impl fmt::Write, strings: &StringPool) -> fmt::Result {
         match self {
-            Self::Nil => write!(f, "nil"),
-            Self::Boolean(b) => write!(f, "{}", b),
-            Self::Double(d) => write!(f, "{}", d),
-            Self::Object(o) => write!(f, "{}", o),
+            Value::Nil => write!(f, "nil"),
+            Value::Boolean(x) => write!(f, "{}", x),
+            Value::Double(x) => write!(f, "{}", x),
+            Value::Object(Object::String(x)) => write!(f, "{}", strings.lookup(*x)),
         }
     }
 }

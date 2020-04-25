@@ -2,7 +2,7 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Object {
-    String(String),
+    String(u32),
 }
 
 impl fmt::Display for Object {
