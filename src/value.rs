@@ -33,7 +33,7 @@ macro_rules! impl_from {
     };
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Nil,
     Boolean(bool),
