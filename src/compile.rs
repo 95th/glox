@@ -1,5 +1,6 @@
 use crate::chunk::{Chunk, OpCode};
 use crate::intern::StringPool;
+use crate::object::Object;
 use crate::value::Value;
 use log::Level;
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -124,7 +125,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn identifier_constant(&mut self, s: &str) -> u8 {
-        let s = self.strings.intern(s);
+        let s = Object::new_string(s, self.strings);
         self.make_constant(s.into())
     }
 
@@ -426,7 +427,7 @@ impl<'a> Compiler<'a> {
 
     fn string(&mut self, _can_assign: bool) {
         let s = self.parser.previous.lexeme_str();
-        let s = self.strings.intern(&s[1..s.len() - 1]);
+        let s = Object::new_string(&s[1..s.len() - 1], self.strings);
         self.emit_constant(s.into());
     }
 

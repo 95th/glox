@@ -1,6 +1,7 @@
 use crate::chunk::{Chunk, OpCode};
 use crate::compile::Compiler;
 use crate::intern::StringPool;
+use crate::object::Object;
 use crate::value::Value;
 use crate::Error;
 use log::Level;
@@ -165,7 +166,7 @@ impl Vm {
                         let sa = self.strings.lookup(sa);
                         let sb = self.strings.lookup(sb);
                         let out = sa.to_string() + sb;
-                        let out = self.strings.intern(out);
+                        let out = Object::new_string(&out, &mut self.strings);
                         push!(self, out.into());
                     } else {
                         push!(self, a);

@@ -33,7 +33,7 @@ macro_rules! impl_from {
     };
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Value {
     Nil,
     Boolean(bool),
@@ -55,16 +55,19 @@ impl Value {
 impl_from! {
     x: bool => Self::Boolean(x),
     x: f64 => Self::Double(x),
-    x: u32 => Self::Object(Object::String(x))
+    x: Object => Self::Object(x)
 }
 
 impl Value {
-    pub fn write(&self, mut f: impl fmt::Write, strings: &StringPool) -> fmt::Result {
+    pub fn write(&self, mut w: impl fmt::Write, strings: &StringPool) -> fmt::Result {
         match self {
-            Value::Nil => write!(f, "nil"),
-            Value::Boolean(x) => write!(f, "{}", x),
-            Value::Double(x) => write!(f, "{}", x),
-            Value::Object(Object::String(x)) => write!(f, "{}", strings.lookup(*x)),
+            Value::Nil => write!(w, "nil"),
+            Value::Boolean(x) => write!(w, "{}", x),
+            Value::Double(x) => write!(w, "{}", x),
+            Value::Object(Object::String(x)) => write!(w, "{}", strings.lookup(*x)),
+            Value::Object(Object::Function { name, .. }) => {
+                write!(w, "<fn {}>", strings.lookup(*name))
+            }
         }
     }
 }

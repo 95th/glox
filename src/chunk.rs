@@ -30,7 +30,7 @@ pub enum OpCode {
     Return,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub values: Vec<Value>,
