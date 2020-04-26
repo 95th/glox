@@ -13,6 +13,7 @@ struct Local<'a> {
 }
 
 pub struct Compiler<'a> {
+    source: &'a str,
     scanner: Scanner<'a>,
     parser: Parser<'a>,
     function: Function,
@@ -36,6 +37,7 @@ macro_rules! chunk {
 impl<'a> Compiler<'a> {
     pub fn new(source: &'a str, kind: FunctionKind, strings: &'a mut StringPool) -> Self {
         Self {
+            source,
             scanner: Scanner::new(source.as_bytes()),
             parser: Parser::new(),
             function: Function::new(),
@@ -59,7 +61,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn declaration(&mut self) {
-        if self.eat(TokenKind::Var) {
+        if self.eat(TokenKind::Fun) {
+            self.fun_declaration();
+        } else if self.eat(TokenKind::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -68,6 +72,28 @@ impl<'a> Compiler<'a> {
         if self.parser.panic_mode {
             self.synchronize();
         }
+    }
+
+    fn fun_declaration(&mut self) {
+        let global = self.parse_variable("Expect function name");
+        self.mark_initialized();
+        self.function(FunctionKind::Function);
+        self.define_variable(global);
+    }
+
+    fn function(&mut self, kind: FunctionKind) {
+        let mut compiler = Compiler::new(self.source, kind, &mut self.strings);
+
+        compiler.begin_scope();
+        compiler.consume(TokenKind::LeftParen, "Expect '(' after function name");
+        compiler.consume(TokenKind::RightParen, "Expect ')' after parameters");
+
+        compiler.consume(TokenKind::LeftBrace, "Expect '{' before function body");
+        compiler.block();
+
+        compiler.end_compile();
+        let function = Object::Function(compiler.function);
+        self.emit_constant(function.into())
     }
 
     fn var_declaration(&mut self) {
@@ -135,6 +161,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn mark_initialized(&mut self) {
+        if self.scope_depth == 0 {
+            return;
+        }
         self.locals.last_mut().unwrap().depth = self.scope_depth;
     }
 
