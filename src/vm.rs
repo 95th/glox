@@ -203,6 +203,10 @@ impl Vm {
                         self.ip += offset as usize;
                     }
                 }
+                Loop => {
+                    let offset = self.read_u16().unwrap();
+                    self.ip -= offset as usize;
+                }
                 Return => return Ok(()),
             }
         }

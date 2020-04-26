@@ -133,6 +133,8 @@ impl<'a> Compiler<'a> {
             self.print_statement();
         } else if self.matches(TokenKind::If) {
             self.if_statement();
+        } else if self.matches(TokenKind::While) {
+            self.while_statement();
         } else if self.matches(TokenKind::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -192,6 +194,23 @@ impl<'a> Compiler<'a> {
         }
 
         self.patch_jump(else_jump);
+    }
+
+    fn while_statement(&mut self) {
+        let loop_start = self.chunk.code.len();
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'while'");
+        self.expression();
+        self.consume(TokenKind::RightParen, "Expect ')' after 'while'");
+
+        let exit_jump = self.emit_jump(OpCode::JumpIfFalse);
+
+        self.emit_op(OpCode::Pop);
+        self.statement();
+
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.emit_op(OpCode::Pop);
     }
 
     fn expression_statement(&mut self) {
@@ -480,6 +499,13 @@ impl<'a> Compiler<'a> {
         self.parser.error_at_current(msg);
     }
 
+    fn end_compile(&mut self) {
+        self.emit_return();
+        if log_enabled!(Level::Trace) {
+            self.chunk.disassemble("code", self.strings);
+        }
+    }
+
     fn emit_jump(&mut self, op: OpCode) -> usize {
         self.emit_op(op);
         self.emit_byte(0xff);
@@ -509,11 +535,16 @@ impl<'a> Compiler<'a> {
         self.emit_byte(byte_2);
     }
 
-    fn end_compile(&mut self) {
-        self.emit_return();
-        if log_enabled!(Level::Trace) {
-            self.chunk.disassemble("code", self.strings);
+    fn emit_loop(&mut self, loop_start: usize) {
+        self.emit_op(OpCode::Loop);
+
+        let offset = self.chunk.code.len() - loop_start + 2;
+        if offset > u16::max_value() as usize {
+            self.parser.error("Loop body too large");
         }
+
+        self.emit_byte(((offset >> 8) & 0xff) as u8);
+        self.emit_byte((offset & 0xff) as u8);
     }
 
     fn emit_op(&mut self, op: OpCode) {

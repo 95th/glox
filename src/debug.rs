@@ -40,6 +40,7 @@ impl Chunk {
             }
             SetLocal | GetLocal => self.byte_instr(opcode, buf, offset),
             Jump | JumpIfFalse => self.jump_instr(opcode, buf, 1, offset),
+            Loop => self.jump_instr(opcode, buf, -1, offset),
         }
     }
 
