@@ -44,7 +44,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn declaration(&mut self) {
-        if self.matches(TokenKind::Var) {
+        if self.eat(TokenKind::Var) {
             self.var_declaration();
         } else {
             self.statement();
@@ -57,7 +57,7 @@ impl<'a> Compiler<'a> {
 
     fn var_declaration(&mut self) {
         let global = self.parse_variable("Expect variable name");
-        if self.matches(TokenKind::Equal) {
+        if self.eat(TokenKind::Equal) {
             self.expression();
         } else {
             self.emit_op(OpCode::Nil);
@@ -129,13 +129,15 @@ impl<'a> Compiler<'a> {
     }
 
     fn statement(&mut self) {
-        if self.matches(TokenKind::Print) {
+        if self.eat(TokenKind::Print) {
             self.print_statement();
-        } else if self.matches(TokenKind::If) {
+        } else if self.eat(TokenKind::For) {
+            self.for_statement();
+        } else if self.eat(TokenKind::If) {
             self.if_statement();
-        } else if self.matches(TokenKind::While) {
+        } else if self.eat(TokenKind::While) {
             self.while_statement();
-        } else if self.matches(TokenKind::LeftBrace) {
+        } else if self.eat(TokenKind::LeftBrace) {
             self.begin_scope();
             self.block();
             self.end_scope();
@@ -175,6 +177,54 @@ impl<'a> Compiler<'a> {
         self.emit_op(OpCode::Print);
     }
 
+    fn for_statement(&mut self) {
+        self.begin_scope();
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'for'");
+
+        if self.eat(TokenKind::Semicolon) {
+            // No initializer
+        } else if self.eat(TokenKind::Var) {
+            self.var_declaration();
+        } else {
+            self.expression_statement();
+        }
+
+        let mut loop_start = self.chunk.code.len();
+
+        let mut exit_jump = None;
+        if !self.eat(TokenKind::Semicolon) {
+            self.expression();
+            self.consume(TokenKind::Semicolon, "Expect ';' after value");
+
+            exit_jump = Some(self.emit_jump(OpCode::JumpIfFalse));
+            self.emit_op(OpCode::Pop);
+        }
+
+        if !self.eat(TokenKind::RightParen) {
+            let body_jump = self.emit_jump(OpCode::Jump);
+
+            let increment_start = self.chunk.code.len();
+            self.expression();
+            self.emit_op(OpCode::Pop);
+            self.consume(TokenKind::RightParen, "Expect ')' after 'for' clauses");
+
+            self.emit_loop(loop_start);
+            loop_start = increment_start;
+            self.patch_jump(body_jump);
+        }
+
+        self.statement();
+
+        self.emit_loop(loop_start);
+
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(exit_jump);
+            self.emit_op(OpCode::Pop);
+        }
+
+        self.end_scope();
+    }
+
     fn if_statement(&mut self) {
         self.consume(TokenKind::LeftBrace, "Expect '(' after 'if'");
         self.expression();
@@ -189,7 +239,7 @@ impl<'a> Compiler<'a> {
         self.patch_jump(then_jump);
         self.emit_op(OpCode::Pop);
 
-        if self.matches(TokenKind::Else) {
+        if self.eat(TokenKind::Else) {
             self.statement();
         }
 
@@ -260,7 +310,7 @@ impl<'a> Compiler<'a> {
             infix_rule(self, can_assign);
         }
 
-        if can_assign && self.matches(TokenKind::Equal) {
+        if can_assign && self.eat(TokenKind::Equal) {
             self.parser.error("Invalid assignment target");
         }
     }
@@ -350,7 +400,7 @@ impl<'a> Compiler<'a> {
             }
         };
 
-        if can_assign && self.matches(TokenKind::Equal) {
+        if can_assign && self.eat(TokenKind::Equal) {
             self.expression();
             self.emit_op(set_op);
         } else {
@@ -464,7 +514,7 @@ impl<'a> Compiler<'a> {
         self.patch_jump(end_jump);
     }
 
-    fn matches(&mut self, kind: TokenKind) -> bool {
+    fn eat(&mut self, kind: TokenKind) -> bool {
         if !self.check(kind) {
             return false;
         }

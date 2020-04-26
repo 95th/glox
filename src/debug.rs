@@ -57,8 +57,8 @@ impl Chunk {
     }
 
     fn jump_instr(&self, opcode: OpCode, mut buf: String, sign: isize, offset: usize) -> usize {
-        let mut jump = (self.code[offset + 1] << 8) as u16;
-        jump |= (self.code[offset + 2]) as u16;
+        let mut jump = (self.code[offset + 1] as u16) << 8;
+        jump |= self.code[offset + 2] as u16;
         write!(
             buf,
             "{:-16?} {:4} -> {}",

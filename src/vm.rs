@@ -28,7 +28,8 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
-        Compiler::new(source, &mut self.chunk, &mut self.strings).compile()?;
+        let compiler = Compiler::new(source, &mut self.chunk, &mut self.strings);
+        compiler.compile()?;
         self.run()
     }
 
@@ -233,7 +234,7 @@ impl Vm {
         let hi = *self.chunk.code.get(self.ip)?;
         let lo = *self.chunk.code.get(self.ip + 1)?;
         self.ip += 2;
-        let out = (hi << 8) as u16 | lo as u16;
+        let out = (hi as u16) << 8 | lo as u16;
         Some(out)
     }
 }
