@@ -14,7 +14,7 @@ impl Chunk {
     }
 
     pub fn disassemble_instr(&self, offset: usize, strings: &StringPool) -> usize {
-        let mut buf = format!("{:04}", offset);
+        let buf = &mut format!("{:04}", offset);
 
         if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
             buf.push_str("   | ");
@@ -32,7 +32,7 @@ impl Chunk {
 
         use OpCode::*;
 
-        match opcode {
+        let offset = match opcode {
             Return | Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not
             | Equal | Greater | Less | Print | Pop => self.simple_instr(opcode, offset, buf),
             Constant | GetGlobal | SetGlobal | DefineGlobal => {
@@ -41,22 +41,24 @@ impl Chunk {
             SetLocal | GetLocal => self.byte_instr(opcode, buf, offset),
             Jump | JumpIfFalse => self.jump_instr(opcode, buf, 1, offset),
             Loop => self.jump_instr(opcode, buf, -1, offset),
-        }
+        };
+
+        trace!("{}", buf);
+        offset
     }
 
-    fn simple_instr(&self, opcode: OpCode, offset: usize, buf: String) -> usize {
-        trace!("{}{:?}", buf, opcode);
+    fn simple_instr(&self, opcode: OpCode, offset: usize, buf: &mut String) -> usize {
+        write!(buf, "{:?}", opcode).unwrap();
         offset + 1
     }
 
-    fn byte_instr(&self, opcode: OpCode, mut buf: String, offset: usize) -> usize {
+    fn byte_instr(&self, opcode: OpCode, buf: &mut String, offset: usize) -> usize {
         let slot = self.code[offset + 1];
         write!(buf, "{:-16?} {:4}", opcode, slot).unwrap();
-        trace!("{}", buf);
         offset + 2
     }
 
-    fn jump_instr(&self, opcode: OpCode, mut buf: String, sign: isize, offset: usize) -> usize {
+    fn jump_instr(&self, opcode: OpCode, buf: &mut String, sign: isize, offset: usize) -> usize {
         let mut jump = (self.code[offset + 1] as u16) << 8;
         jump |= self.code[offset + 2] as u16;
         write!(
@@ -74,13 +76,12 @@ impl Chunk {
         &self,
         opcode: OpCode,
         offset: usize,
-        mut buf: String,
+        buf: &mut String,
         strings: &StringPool,
     ) -> usize {
         let constant = self.code[offset + 1];
         write!(buf, "{:-16?} {:4} ", opcode, constant).unwrap();
-        self.write_value(constant, &mut buf, strings);
-        trace!("{}", buf);
+        self.write_value(constant, buf, strings);
         offset + 2
     }
 

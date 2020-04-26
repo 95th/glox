@@ -240,5 +240,5 @@ impl Vm {
 }
 
 fn is_falsey(value: &Value) -> bool {
-    matches!(value, Value::Nil | Value::Boolean(true))
+    matches!(value, Value::Nil | Value::Boolean(false))
 }

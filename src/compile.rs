@@ -226,7 +226,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn if_statement(&mut self) {
-        self.consume(TokenKind::LeftBrace, "Expect '(' after 'if'");
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'if'");
         self.expression();
         self.consume(TokenKind::RightParen, "Expect ')' after condition");
 
