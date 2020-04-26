@@ -1,5 +1,6 @@
-use crate::chunk::{Chunk, OpCode};
+use crate::chunk::OpCode;
 use crate::intern::StringPool;
+use crate::object::Function;
 use crate::object::Object;
 use crate::value::Value;
 use log::Level;
@@ -14,25 +15,38 @@ struct Local<'a> {
 pub struct Compiler<'a> {
     scanner: Scanner<'a>,
     parser: Parser<'a>,
-    chunk: &'a mut Chunk,
+    function: Function,
+    kind: FunctionKind,
     strings: &'a mut StringPool,
     locals: Vec<Local<'a>>,
     scope_depth: isize,
 }
 
+pub enum FunctionKind {
+    Function,
+    Script,
+}
+
+macro_rules! chunk {
+    ($self: expr) => {
+        $self.function.chunk
+    };
+}
+
 impl<'a> Compiler<'a> {
-    pub fn new(source: &'a str, chunk: &'a mut Chunk, strings: &'a mut StringPool) -> Self {
+    pub fn new(source: &'a str, kind: FunctionKind, strings: &'a mut StringPool) -> Self {
         Self {
             scanner: Scanner::new(source.as_bytes()),
             parser: Parser::new(),
-            chunk,
+            function: Function::new(),
+            kind,
             strings,
             locals: Vec::new(),
             scope_depth: 0,
         }
     }
 
-    pub fn compile(mut self) -> crate::Result<()> {
+    pub fn compile(mut self) -> crate::Result<Function> {
         self.advance();
         self.declaration();
         self.end_compile();
@@ -40,7 +54,7 @@ impl<'a> Compiler<'a> {
         if self.parser.had_error {
             Err(crate::Error::Compile)
         } else {
-            Ok(())
+            Ok(self.function)
         }
     }
 
@@ -190,7 +204,7 @@ impl<'a> Compiler<'a> {
             self.expression_statement();
         }
 
-        let mut loop_start = self.chunk.code.len();
+        let mut loop_start = chunk!(self).code.len();
 
         let mut exit_jump = None;
         if !self.eat(TokenKind::Semicolon) {
@@ -204,7 +218,7 @@ impl<'a> Compiler<'a> {
         if !self.eat(TokenKind::RightParen) {
             let body_jump = self.emit_jump(OpCode::Jump);
 
-            let increment_start = self.chunk.code.len();
+            let increment_start = chunk!(self).code.len();
             self.expression();
             self.emit_op(OpCode::Pop);
             self.consume(TokenKind::RightParen, "Expect ')' after 'for' clauses");
@@ -248,7 +262,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn while_statement(&mut self) {
-        let loop_start = self.chunk.code.len();
+        let loop_start = chunk!(self).code.len();
         self.consume(TokenKind::LeftParen, "Expect '(' after 'while'");
         self.expression();
         self.consume(TokenKind::RightParen, "Expect ')' after 'while'");
@@ -553,7 +567,7 @@ impl<'a> Compiler<'a> {
     fn end_compile(&mut self) {
         self.emit_return();
         if log_enabled!(Level::Trace) {
-            self.chunk.disassemble("code", self.strings);
+            chunk!(self).disassemble("code", self.strings);
         }
     }
 
@@ -561,11 +575,11 @@ impl<'a> Compiler<'a> {
         self.emit_op(op);
         self.emit_byte(0xff);
         self.emit_byte(0xff);
-        self.chunk.code.len() - 2
+        chunk!(self).code.len() - 2
     }
 
     fn patch_jump(&mut self, offset: usize) {
-        let jump = self.chunk.code.len() - offset - 2;
+        let jump = chunk!(self).code.len() - offset - 2;
 
         if jump > u16::max_value() as usize {
             self.parser.error("Too much code to jump over");
@@ -573,12 +587,12 @@ impl<'a> Compiler<'a> {
 
         let jump = jump as u16;
 
-        self.chunk.code[offset] = (jump >> 8 & 0xff) as u8;
-        self.chunk.code[offset + 1] = (jump & 0xff) as u8;
+        chunk!(self).code[offset] = (jump >> 8 & 0xff) as u8;
+        chunk!(self).code[offset + 1] = (jump & 0xff) as u8;
     }
 
     fn emit_byte(&mut self, byte: u8) {
-        self.chunk.push_chunk(byte, self.parser.previous.line);
+        chunk!(self).push_chunk(byte, self.parser.previous.line);
     }
 
     fn emit_byte2(&mut self, byte_1: u8, byte_2: u8) {
@@ -589,7 +603,7 @@ impl<'a> Compiler<'a> {
     fn emit_loop(&mut self, loop_start: usize) {
         self.emit_op(OpCode::Loop);
 
-        let offset = self.chunk.code.len() - loop_start + 2;
+        let offset = chunk!(self).code.len() - loop_start + 2;
         if offset > u16::max_value() as usize {
             self.parser.error("Loop body too large");
         }
@@ -617,7 +631,7 @@ impl<'a> Compiler<'a> {
     }
 
     fn make_constant(&mut self, value: Value) -> u8 {
-        let mut constant = self.chunk.push_const(value);
+        let mut constant = chunk!(self).push_const(value);
         if constant > u8::max_value() as usize {
             self.parser.error("Too many constants in one chunk");
             constant = 0;
@@ -688,16 +702,8 @@ macro_rules! error_at {
 impl<'a> Parser<'a> {
     fn new() -> Parser<'a> {
         Parser {
-            current: Token {
-                kind: TokenKind::Eof,
-                lexeme: &[],
-                line: 0,
-            },
-            previous: Token {
-                kind: TokenKind::Eof,
-                lexeme: &[],
-                line: 0,
-            },
+            current: Token::new(),
+            previous: Token::new(),
             had_error: false,
             panic_mode: false,
         }
@@ -925,6 +931,16 @@ pub struct Token<'a> {
     kind: TokenKind,
     lexeme: &'a [u8],
     line: usize,
+}
+
+impl<'a> Token<'a> {
+    fn new() -> Self {
+        Self {
+            kind: TokenKind::Eof,
+            lexeme: &[],
+            line: 0,
+        }
+    }
 }
 
 impl<'a> Token<'a> {

@@ -4,7 +4,7 @@ use crate::intern::StringPool;
 #[derive(Clone)]
 pub enum Object {
     String(u32),
-    Function { name: u32, arity: u32, chunk: Chunk },
+    Function(Function),
 }
 
 impl Object {
@@ -13,9 +13,26 @@ impl Object {
     }
 
     pub fn new_function(name: &str, arity: u32, pool: &mut StringPool) -> Self {
-        Self::Function {
-            name: pool.intern(name),
+        Self::Function(Function {
+            name: pool.intern(name) as i32,
             arity,
+            chunk: Chunk::new(),
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct Function {
+    pub name: i32,
+    pub arity: u32,
+    pub chunk: Chunk,
+}
+
+impl Function {
+    pub fn new() -> Self {
+        Self {
+            name: -1,
+            arity: 0,
             chunk: Chunk::new(),
         }
     }

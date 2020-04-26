@@ -65,8 +65,8 @@ impl Value {
             Value::Boolean(x) => write!(w, "{}", x),
             Value::Double(x) => write!(w, "{}", x),
             Value::Object(Object::String(x)) => write!(w, "{}", strings.lookup(*x)),
-            Value::Object(Object::Function { name, .. }) => {
-                write!(w, "<fn {}>", strings.lookup(*name))
+            Value::Object(Object::Function(x)) => {
+                write!(w, "<fn {}>", strings.lookup(x.name as u32))
             }
         }
     }

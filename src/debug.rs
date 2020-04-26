@@ -35,11 +35,15 @@ impl Chunk {
         let offset = match opcode {
             Return | Negate | Add | Subtract | Multiply | Divide | Nil | True | False | Not
             | Equal | Greater | Less | Print | Pop => self.simple_instr(opcode, offset, buf),
+
             Constant | GetGlobal | SetGlobal | DefineGlobal => {
                 self.constant_instr(opcode, offset, buf, strings)
             }
+
             SetLocal | GetLocal => self.byte_instr(opcode, buf, offset),
+
             Jump | JumpIfFalse => self.jump_instr(opcode, buf, 1, offset),
+
             Loop => self.jump_instr(opcode, buf, -1, offset),
         };
 

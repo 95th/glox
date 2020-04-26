@@ -1,7 +1,7 @@
-use crate::chunk::{Chunk, OpCode};
-use crate::compile::Compiler;
+use crate::chunk::OpCode;
+use crate::compile::{Compiler, FunctionKind};
 use crate::intern::StringPool;
-use crate::object::Object;
+use crate::object::{Function, Object};
 use crate::value::Value;
 use crate::Error;
 use log::Level;
@@ -10,27 +10,35 @@ use std::collections::HashMap;
 
 pub struct Vm {
     stack: Vec<Value>,
-    chunk: Chunk,
+    frames: Vec<CallFrame>,
     strings: StringPool,
     globals: HashMap<u32, Value>,
+}
+
+struct CallFrame {
+    function: Function,
     ip: usize,
+    stack_top: usize,
 }
 
 impl Vm {
     pub fn new() -> Self {
-        const STACK_SIZE: usize = 256;
         Self {
-            stack: Vec::with_capacity(STACK_SIZE),
-            chunk: Chunk::new(),
+            stack: Vec::with_capacity(256),
+            frames: Vec::with_capacity(64),
             strings: StringPool::new(),
             globals: HashMap::new(),
-            ip: 0,
         }
     }
 
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
-        let compiler = Compiler::new(source, &mut self.chunk, &mut self.strings);
-        compiler.compile()?;
+        let compiler = Compiler::new(source, FunctionKind::Script, &mut self.strings);
+        let function = compiler.compile()?;
+        self.frames.push(CallFrame {
+            function,
+            ip: 0,
+            stack_top: 0,
+        });
         self.run()
     }
 
@@ -47,10 +55,9 @@ impl Vm {
 
     pub fn clear(&mut self) {
         self.stack.clear();
-        self.chunk.clear();
+        self.frames.clear();
         self.globals.clear();
         self.strings.clear();
-        self.ip = 0;
     }
 }
 
@@ -89,12 +96,19 @@ macro_rules! binary_op {
 macro_rules! runtime_error {
     ($self: expr, $fmt: literal $(, $($args: tt)* )?) => {
         println!($fmt $(, $($args)* )? );
-        let i = $self.ip - 1;
-        let line = $self.chunk.lines[i];
+        let f = frame!($self);
+        let i = f.ip - 1;
+        let line = f.function.chunk.lines[i];
         println!("[line: {}] in script", line);
         $self.stack.clear();
         return Err(Error::Runtime);
     }
+}
+
+macro_rules! frame {
+    ($self: expr) => {
+        $self.frames.last_mut().unwrap()
+    };
 }
 
 impl Vm {
@@ -104,7 +118,8 @@ impl Vm {
         while let Some(instr) = self.read_instr() {
             if log_enabled!(Level::Trace) {
                 self.print_stack(&self.strings);
-                self.chunk.disassemble_instr(self.ip - 1, &self.strings);
+                let f = frame!(self);
+                f.function.chunk.disassemble_instr(f.ip - 1, &self.strings);
             }
 
             match instr {
@@ -120,7 +135,8 @@ impl Vm {
                 }
                 GetLocal => {
                     let slot = self.read_byte().unwrap();
-                    push!(self, self.stack[slot as usize].clone());
+                    let top = frame!(self).stack_top;
+                    push!(self, self.stack[top..][slot as usize].clone());
                 }
                 GetGlobal => {
                     let name = self.read_constant();
@@ -133,7 +149,8 @@ impl Vm {
                 }
                 SetLocal => {
                     let slot = self.read_byte().unwrap();
-                    self.stack[slot as usize] = peek!(self).clone();
+                    let top = frame!(self).stack_top;
+                    self.stack[top..][slot as usize] = peek!(self).clone();
                 }
                 SetGlobal => {
                     let name = self.read_constant();
@@ -197,17 +214,17 @@ impl Vm {
                 }
                 Jump => {
                     let offset = self.read_u16().unwrap();
-                    self.ip += offset as usize;
+                    frame!(self).ip += offset as usize;
                 }
                 JumpIfFalse => {
                     let offset = self.read_u16().unwrap();
                     if is_falsey(peek!(self)) {
-                        self.ip += offset as usize;
+                        frame!(self).ip += offset as usize;
                     }
                 }
                 Loop => {
                     let offset = self.read_u16().unwrap();
-                    self.ip -= offset as usize;
+                    frame!(self).ip -= offset as usize;
                 }
                 Return => return Ok(()),
             }
@@ -217,8 +234,9 @@ impl Vm {
     }
 
     fn read_byte(&mut self) -> Option<u8> {
-        let byte = *self.chunk.code.get(self.ip)?;
-        self.ip += 1;
+        let f = frame!(self);
+        let byte = *f.function.chunk.code.get(f.ip)?;
+        f.ip += 1;
         Some(byte)
     }
 
@@ -228,13 +246,14 @@ impl Vm {
 
     fn read_constant(&mut self) -> Value {
         let idx = self.read_byte().unwrap() as usize;
-        self.chunk.values[idx].clone()
+        frame!(self).function.chunk.values[idx].clone()
     }
 
     fn read_u16(&mut self) -> Option<u16> {
-        let hi = *self.chunk.code.get(self.ip)?;
-        let lo = *self.chunk.code.get(self.ip + 1)?;
-        self.ip += 2;
+        let f = frame!(self);
+        let hi = *f.function.chunk.code.get(f.ip)?;
+        let lo = *f.function.chunk.code.get(f.ip + 1)?;
+        f.ip += 2;
         let out = (hi as u16) << 8 | lo as u16;
         Some(out)
     }
