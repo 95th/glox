@@ -39,6 +39,7 @@ impl Chunk {
                 self.constant_instr(opcode, offset, buf, strings)
             }
             SetLocal | GetLocal => self.byte_instr(opcode, buf, offset),
+            Jump | JumpIfFalse => self.jump_instr(opcode, buf, 1, offset),
         }
     }
 
@@ -52,6 +53,20 @@ impl Chunk {
         write!(buf, "{:-16?} {:4}", opcode, slot).unwrap();
         trace!("{}", buf);
         offset + 2
+    }
+
+    fn jump_instr(&self, opcode: OpCode, mut buf: String, sign: isize, offset: usize) -> usize {
+        let mut jump = (self.code[offset + 1] << 8) as u16;
+        jump |= (self.code[offset + 2]) as u16;
+        write!(
+            buf,
+            "{:-16?} {:4} -> {}",
+            opcode,
+            offset,
+            offset as isize + 3 + sign * jump as isize
+        )
+        .unwrap();
+        offset + 3
     }
 
     fn constant_instr(

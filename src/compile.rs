@@ -131,6 +131,8 @@ impl<'a> Compiler<'a> {
     fn statement(&mut self) {
         if self.matches(TokenKind::Print) {
             self.print_statement();
+        } else if self.matches(TokenKind::If) {
+            self.if_statement();
         } else if self.matches(TokenKind::LeftBrace) {
             self.begin_scope();
             self.block();
@@ -169,6 +171,27 @@ impl<'a> Compiler<'a> {
         self.expression();
         self.consume(TokenKind::Semicolon, "Expect ';' after value");
         self.emit_op(OpCode::Print);
+    }
+
+    fn if_statement(&mut self) {
+        self.consume(TokenKind::LeftBrace, "Expect '(' after 'if'");
+        self.expression();
+        self.consume(TokenKind::RightParen, "Expect ')' after condition");
+
+        let then_jump = self.emit_jump(OpCode::JumpIfFalse);
+        self.emit_op(OpCode::Pop);
+        self.statement();
+
+        let else_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(then_jump);
+        self.emit_op(OpCode::Pop);
+
+        if self.matches(TokenKind::Else) {
+            self.statement();
+        }
+
+        self.patch_jump(else_jump);
     }
 
     fn expression_statement(&mut self) {
@@ -274,7 +297,7 @@ impl<'a> Compiler<'a> {
             Identifier => p!(Some variable, None, None),
             String => p!(Some string, None, None),
             Number => p!(Some number, None, None),
-            And => p!(),
+            And => p!(None, Some and, And),
             Class => p!(),
             Else => p!(),
             False => p!(Some literal, None, None),
@@ -282,7 +305,7 @@ impl<'a> Compiler<'a> {
             Fun => p!(),
             If => p!(),
             Nil => p!(Some literal, None, None),
-            Or => p!(),
+            Or => p!(None, Some or, Or),
             Print => p!(),
             Return => p!(),
             Super => p!(),
@@ -402,6 +425,26 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn and(&mut self, _can_assign: bool) {
+        let end_jump = self.emit_jump(OpCode::Jump);
+
+        self.emit_op(OpCode::Pop);
+        self.parse_precendence(Precedence::And);
+
+        self.patch_jump(end_jump);
+    }
+
+    fn or(&mut self, _can_assign: bool) {
+        let else_jump = self.emit_jump(OpCode::JumpIfFalse);
+        let end_jump = self.emit_jump(OpCode::Jump);
+
+        self.patch_jump(else_jump);
+        self.emit_op(OpCode::Pop);
+
+        self.parse_precendence(Precedence::Or);
+        self.patch_jump(end_jump);
+    }
+
     fn matches(&mut self, kind: TokenKind) -> bool {
         if !self.check(kind) {
             return false;
@@ -435,6 +478,26 @@ impl<'a> Compiler<'a> {
         }
 
         self.parser.error_at_current(msg);
+    }
+
+    fn emit_jump(&mut self, op: OpCode) -> usize {
+        self.emit_op(op);
+        self.emit_byte(0xff);
+        self.emit_byte(0xff);
+        self.chunk.code.len() - 2
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+        let jump = self.chunk.code.len() - offset - 2;
+
+        if jump > u16::max_value() as usize {
+            self.parser.error("Too much code to jump over");
+        }
+
+        let jump = jump as u16;
+
+        self.chunk.code[offset] = (jump >> 8 & 0xff) as u8;
+        self.chunk.code[offset + 1] = (jump & 0xff) as u8;
     }
 
     fn emit_byte(&mut self, byte: u8) {

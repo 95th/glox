@@ -176,7 +176,7 @@ impl Vm {
                 Multiply => binary_op!(self, *),
                 Divide => binary_op!(self, /),
                 Not => {
-                    let b = is_falsey(pop!(self));
+                    let b = is_falsey(&pop!(self));
                     push!(self, Value::Boolean(b));
                 }
                 Negate => {
@@ -192,6 +192,16 @@ impl Vm {
                     let mut s = String::new();
                     pop!(self).write(&mut s, &self.strings).unwrap();
                     println!("{}", s);
+                }
+                Jump => {
+                    let offset = self.read_u16().unwrap();
+                    self.ip += offset as usize;
+                }
+                JumpIfFalse => {
+                    let offset = self.read_u16().unwrap();
+                    if is_falsey(peek!(self)) {
+                        self.ip += offset as usize;
+                    }
                 }
                 Return => return Ok(()),
             }
@@ -214,8 +224,16 @@ impl Vm {
         let idx = self.read_byte().unwrap() as usize;
         self.chunk.values[idx].clone()
     }
+
+    fn read_u16(&mut self) -> Option<u16> {
+        let hi = *self.chunk.code.get(self.ip)?;
+        let lo = *self.chunk.code.get(self.ip + 1)?;
+        self.ip += 2;
+        let out = (hi << 8) as u16 | lo as u16;
+        Some(out)
+    }
 }
 
-fn is_falsey(value: Value) -> bool {
+fn is_falsey(value: &Value) -> bool {
     matches!(value, Value::Nil | Value::Boolean(true))
 }
