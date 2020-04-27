@@ -421,15 +421,15 @@ impl<'a, 'b> CompileSession<'a, 'b> {
                 p!(None, None, None)
             };
             ($prefix: expr, Some $infix: ident, $precedence: ident) => {
-                p!($prefix, Some(Box::new(Self::$infix)), $precedence)
+                p!($prefix, Some(Self::$infix), $precedence)
             };
             (Some $prefix: ident, $infix: expr, $precedence: ident) => {
-                p!(Some(Box::new(Self::$prefix)), $infix, $precedence)
+                p!(Some(Self::$prefix), $infix, $precedence)
             };
             (Some $prefix: ident, Some $infix: ident, $precedence: ident) => {
                 p!(
-                    Some(Box::new(Self::$prefix)),
-                    Some(Box::new(Self::$infix)),
+                    Some(Self::$prefix),
+                    Some(Self::$infix),
                     $precedence
                 )
             };
@@ -751,7 +751,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
     }
 }
 
-type ParseFn<'a, 'b> = Box<dyn Fn(&mut CompileSession<'a, 'b>, bool)>;
+type ParseFn<'a, 'b> = fn(&mut CompileSession<'a, 'b>, bool);
 
 struct ParseRule<'a, 'b> {
     prefix: Option<ParseFn<'a, 'b>>,
