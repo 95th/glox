@@ -1,5 +1,5 @@
 use crate::chunk::OpCode;
-use crate::compile::{Compiler, FunctionKind, Local, Parser, Scanner, Token};
+use crate::compile::{Compiler, FunctionKind};
 use crate::intern::StringPool;
 use crate::object::{Function, Object};
 use crate::value::Value;
@@ -32,24 +32,8 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
-        let mut scanner = Scanner::new(source.as_bytes());
-        let mut parser = Parser::new();
-        let mut locals = Vec::new();
-
-        locals.push(Local {
-            name: Token::new(),
-            depth: 0,
-        });
-
-        let compiler = Compiler::new(
-            FunctionKind::Script,
-            &mut scanner,
-            &mut parser,
-            &mut locals,
-            &mut self.strings,
-            0,
-        );
-        let function = Rc::new(compiler.compile()?);
+        let compiler = Compiler::new(source, &mut self.strings);
+        let function = Rc::new(compiler.compile(FunctionKind::Script)?);
         self.stack.push(Object::Function(function.clone()).into());
         self.call_value(Object::Function(function).into(), 0)?;
         self.run()

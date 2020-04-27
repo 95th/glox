@@ -8,12 +8,56 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 use std::rc::Rc;
 
-pub struct Local<'a> {
-    pub name: Token<'a>,
-    pub depth: isize,
+struct Local<'a> {
+    name: Token<'a>,
+    depth: isize,
 }
 
-pub struct Compiler<'a, 'b> {
+pub struct Compiler<'a> {
+    scanner: Scanner<'a>,
+    parser: Parser<'a>,
+    strings: &'a mut StringPool,
+    locals: Vec<Local<'a>>,
+}
+
+impl<'a> Compiler<'a> {
+    pub fn new(source: &'a str, strings: &'a mut StringPool) -> Self {
+        let mut locals = Vec::new();
+        locals.push(Local {
+            name: Token::new(),
+            depth: 0,
+        });
+
+        Self {
+            scanner: Scanner::new(source.as_bytes()),
+            parser: Parser::new(),
+            strings,
+            locals,
+        }
+    }
+
+    pub fn compile(mut self, kind: FunctionKind) -> crate::Result<Function> {
+        let mut session = CompileSession::new(
+            kind,
+            &mut self.scanner,
+            &mut self.parser,
+            &mut self.locals,
+            self.strings,
+            0,
+        );
+        session.advance();
+        session.declaration();
+        session.end_compile();
+
+        if session.parser.had_error {
+            Err(crate::Error::Compile)
+        } else {
+            Ok(session.function)
+        }
+    }
+}
+
+struct CompileSession<'a, 'b> {
     scanner: &'b mut Scanner<'a>,
     parser: &'b mut Parser<'a>,
     function: Function,
@@ -35,8 +79,8 @@ macro_rules! chunk {
     };
 }
 
-impl<'a, 'b> Compiler<'a, 'b> {
-    pub fn new(
+impl<'a, 'b> CompileSession<'a, 'b> {
+    fn new(
         kind: FunctionKind,
         scanner: &'b mut Scanner<'a>,
         parser: &'b mut Parser<'a>,
@@ -60,8 +104,8 @@ impl<'a, 'b> Compiler<'a, 'b> {
         }
     }
 
-    fn new_inner(&mut self, kind: FunctionKind) -> Compiler<'a, '_> {
-        Compiler::new(
+    fn new_inner(&mut self, kind: FunctionKind) -> CompileSession<'a, '_> {
+        CompileSession::new(
             kind,
             self.scanner,
             self.parser,
@@ -69,18 +113,6 @@ impl<'a, 'b> Compiler<'a, 'b> {
             self.strings,
             self.scope_depth,
         )
-    }
-
-    pub fn compile(mut self) -> crate::Result<Function> {
-        self.advance();
-        self.declaration();
-        self.end_compile();
-
-        if self.parser.had_error {
-            Err(crate::Error::Compile)
-        } else {
-            Ok(self.function)
-        }
     }
 
     fn declaration(&mut self) {
@@ -105,36 +137,36 @@ impl<'a, 'b> Compiler<'a, 'b> {
     }
 
     fn function(&mut self, kind: FunctionKind) {
-        let mut compiler = self.new_inner(kind);
+        let mut inner = self.new_inner(kind);
 
-        compiler.begin_scope();
-        compiler.consume(TokenKind::LeftParen, "Expect '(' after function name");
+        inner.begin_scope();
+        inner.consume(TokenKind::LeftParen, "Expect '(' after function name");
 
-        if !compiler.check(TokenKind::RightParen) {
+        if !inner.check(TokenKind::RightParen) {
             loop {
-                compiler.function.arity += 1;
-                if compiler.function.arity > 255 {
-                    compiler
+                inner.function.arity += 1;
+                if inner.function.arity > 255 {
+                    inner
                         .parser
                         .error_at_current("Cannot have more than 255 parameters");
                 }
 
-                let param_constant = compiler.parse_variable("Expect parameter name");
-                compiler.define_variable(param_constant);
+                let param_constant = inner.parse_variable("Expect parameter name");
+                inner.define_variable(param_constant);
 
-                if !compiler.eat(TokenKind::Comma) {
+                if !inner.eat(TokenKind::Comma) {
                     break;
                 }
             }
         }
 
-        compiler.consume(TokenKind::RightParen, "Expect ')' after parameters");
+        inner.consume(TokenKind::RightParen, "Expect ')' after parameters");
 
-        compiler.consume(TokenKind::LeftBrace, "Expect '{' before function body");
-        compiler.block();
+        inner.consume(TokenKind::LeftBrace, "Expect '{' before function body");
+        inner.block();
 
-        compiler.end_compile();
-        let function = Object::Function(Rc::new(compiler.function));
+        inner.end_compile();
+        let function = Object::Function(Rc::new(inner.function));
         self.emit_constant(function.into())
     }
 
@@ -737,7 +769,7 @@ impl<'a, 'b> Compiler<'a, 'b> {
     }
 }
 
-type ParseFn<'a, 'b> = Box<dyn Fn(&mut Compiler<'a, 'b>, bool)>;
+type ParseFn<'a, 'b> = Box<dyn Fn(&mut CompileSession<'a, 'b>, bool)>;
 
 struct ParseRule<'a, 'b> {
     prefix: Option<ParseFn<'a, 'b>>,
@@ -768,7 +800,7 @@ impl Precedence {
     }
 }
 
-pub struct Parser<'a> {
+struct Parser<'a> {
     current: Token<'a>,
     previous: Token<'a>,
     had_error: bool,
@@ -797,7 +829,7 @@ macro_rules! error_at {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new() -> Parser<'a> {
+    fn new() -> Parser<'a> {
         Parser {
             current: Token::new(),
             previous: Token::new(),
@@ -815,7 +847,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub struct Scanner<'a> {
+struct Scanner<'a> {
     source: &'a [u8],
     start: usize,
     current: usize,
@@ -833,7 +865,7 @@ macro_rules! if_match_eq {
 }
 
 impl<'a> Scanner<'a> {
-    pub fn new(source: &'a [u8]) -> Self {
+    fn new(source: &'a [u8]) -> Self {
         Self {
             source,
             start: 0,
