@@ -1,11 +1,9 @@
 {
-    fun hello() {
-        fun hello() {
-            print "hello world";
-        }
+fun c() {
+  c("too", "many");
+}
+fun b() { c(); }
+fun a() { b(); }
 
-        hello();
-    }
-
-    hello();
+a();
 }

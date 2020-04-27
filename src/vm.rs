@@ -1,5 +1,5 @@
 use crate::chunk::OpCode;
-use crate::compile::{Compiler, FunctionKind, Parser, Scanner};
+use crate::compile::{Compiler, FunctionKind, Local, Parser, Scanner, Token};
 use crate::intern::StringPool;
 use crate::object::{Function, Object};
 use crate::value::Value;
@@ -19,7 +19,6 @@ pub struct Vm {
 struct CallFrame {
     function: Rc<Function>,
     ip: usize,
-    stack_top: usize,
 }
 
 impl Vm {
@@ -35,13 +34,23 @@ impl Vm {
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
         let mut scanner = Scanner::new(source.as_bytes());
         let mut parser = Parser::new();
+        let mut locals = Vec::new();
+
+        locals.push(Local {
+            name: Token::new(),
+            depth: 0,
+        });
+
         let compiler = Compiler::new(
             FunctionKind::Script,
             &mut scanner,
             &mut parser,
+            &mut locals,
             &mut self.strings,
+            0,
         );
         let function = Rc::new(compiler.compile()?);
+        self.stack.push(Object::Function(function.clone()).into());
         self.call_value(Object::Function(function).into(), 0)?;
         self.run()
     }
@@ -109,7 +118,7 @@ macro_rules! runtime_error {
             if f.function.name.is_empty() {
                 eprintln!("script");
             } else {
-                eprintln!("{}", f.function.name);
+                eprintln!("<fn {}>", f.function.name);
             }
         }
 
@@ -148,8 +157,7 @@ impl Vm {
                 }
                 GetLocal => {
                     let slot = self.read_byte().unwrap();
-                    let top = frame!(self).stack_top;
-                    push!(self, self.stack[top..][slot as usize].clone());
+                    push!(self, self.stack[slot as usize].clone());
                 }
                 GetGlobal => {
                     let name = self.read_constant();
@@ -162,8 +170,7 @@ impl Vm {
                 }
                 SetLocal => {
                     let slot = self.read_byte().unwrap();
-                    let top = frame!(self).stack_top;
-                    self.stack[top..][slot as usize] = peek!(self).clone();
+                    self.stack[slot as usize] = peek!(self).clone();
                 }
                 SetGlobal => {
                     let name = self.read_constant();
@@ -273,11 +280,7 @@ impl Vm {
             runtime_error!(self, "Stack overflow",);
         }
 
-        let frame = CallFrame {
-            function,
-            ip: 0,
-            stack_top: self.stack.len() - arg_count as usize,
-        };
+        let frame = CallFrame { function, ip: 0 };
         self.frames.push(frame);
         Ok(())
     }

@@ -8,9 +8,9 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
 use std::rc::Rc;
 
-struct Local<'a> {
-    name: Token<'a>,
-    depth: isize,
+pub struct Local<'a> {
+    pub name: Token<'a>,
+    pub depth: isize,
 }
 
 pub struct Compiler<'a, 'b> {
@@ -19,7 +19,7 @@ pub struct Compiler<'a, 'b> {
     function: Function,
     kind: FunctionKind,
     strings: &'b mut StringPool,
-    locals: Vec<Local<'a>>,
+    locals: &'b mut Vec<Local<'a>>,
     scope_depth: isize,
 }
 
@@ -40,25 +40,35 @@ impl<'a, 'b> Compiler<'a, 'b> {
         kind: FunctionKind,
         scanner: &'b mut Scanner<'a>,
         parser: &'b mut Parser<'a>,
+        locals: &'b mut Vec<Local<'a>>,
         strings: &'b mut StringPool,
+        scope_depth: isize,
     ) -> Self {
         let mut function = Function::new();
         if kind != FunctionKind::Script {
             function.name = parser.previous.lexeme_str().to_string();
         }
+
         Self {
             scanner,
             parser,
             function,
             kind,
             strings,
-            locals: Vec::new(),
-            scope_depth: 0,
+            locals,
+            scope_depth,
         }
     }
 
     fn new_inner(&mut self, kind: FunctionKind) -> Compiler<'a, '_> {
-        Compiler::new(kind, self.scanner, self.parser, self.strings)
+        Compiler::new(
+            kind,
+            self.scanner,
+            self.parser,
+            self.locals,
+            self.strings,
+            self.scope_depth,
+        )
     }
 
     pub fn compile(mut self) -> crate::Result<Function> {
@@ -1022,7 +1032,7 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             kind: TokenKind::Eof,
             lexeme: &[],
