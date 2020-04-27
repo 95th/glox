@@ -19,6 +19,7 @@ pub struct Vm {
 struct CallFrame {
     function: Rc<Function>,
     ip: usize,
+    stack_top: usize,
 }
 
 impl Vm {
@@ -141,7 +142,13 @@ impl Vm {
                 }
                 GetLocal => {
                     let slot = self.read_byte().unwrap();
-                    push!(self, self.stack[slot as usize].clone());
+                    let top = frame!(self).stack_top;
+                    push!(self, self.stack[top..][slot as usize].clone());
+                }
+                SetLocal => {
+                    let slot = self.read_byte().unwrap();
+                    let top = frame!(self).stack_top;
+                    self.stack[top..][slot as usize] = peek!(self).clone();
                 }
                 GetGlobal => {
                     let name = self.read_constant();
@@ -151,10 +158,6 @@ impl Vm {
                     } else {
                         runtime_error!(self, "Undefined variable {}", self.strings.lookup(name));
                     }
-                }
-                SetLocal => {
-                    let slot = self.read_byte().unwrap();
-                    self.stack[slot as usize] = peek!(self).clone();
                 }
                 SetGlobal => {
                     let name = self.read_constant();
@@ -234,7 +237,21 @@ impl Vm {
                     let arg_count = self.read_byte().unwrap();
                     self.call_value(peek!(self, arg_count as usize).clone(), arg_count)?;
                 }
-                Return => return Ok(()),
+                Return => {
+                    let result = pop!(self);
+
+                    let f = self.frames.pop().unwrap();
+
+                    // Unwind the stack
+                    self.stack.truncate(f.stack_top);
+
+                    if self.frames.is_empty() {
+                        self.stack.pop();
+                        return Ok(());
+                    }
+
+                    self.stack.push(result);
+                }
             }
         }
 
@@ -264,7 +281,11 @@ impl Vm {
             runtime_error!(self, "Stack overflow",);
         }
 
-        let frame = CallFrame { function, ip: 0 };
+        let frame = CallFrame {
+            function,
+            ip: 0,
+            stack_top: self.stack.len() - arg_count as usize - 1,
+        };
         self.frames.push(frame);
         Ok(())
     }

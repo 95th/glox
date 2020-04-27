@@ -17,34 +17,20 @@ pub struct Compiler<'a> {
     scanner: Scanner<'a>,
     parser: Parser<'a>,
     strings: &'a mut StringPool,
-    locals: Vec<Local<'a>>,
 }
 
 impl<'a> Compiler<'a> {
     pub fn new(source: &'a str, strings: &'a mut StringPool) -> Self {
-        let mut locals = Vec::new();
-        locals.push(Local {
-            name: Token::new(),
-            depth: 0,
-        });
-
         Self {
             scanner: Scanner::new(source.as_bytes()),
             parser: Parser::new(),
             strings,
-            locals,
         }
     }
 
     pub fn compile(mut self, kind: FunctionKind) -> crate::Result<Function> {
-        let mut session = CompileSession::new(
-            kind,
-            &mut self.scanner,
-            &mut self.parser,
-            &mut self.locals,
-            self.strings,
-            0,
-        );
+        let mut session =
+            CompileSession::new(kind, &mut self.scanner, &mut self.parser, self.strings);
         session.advance();
         session.declaration();
         session.end_compile();
@@ -63,7 +49,7 @@ struct CompileSession<'a, 'b> {
     function: Function,
     kind: FunctionKind,
     strings: &'b mut StringPool,
-    locals: &'b mut Vec<Local<'a>>,
+    locals: Vec<Local<'a>>,
     scope_depth: isize,
 }
 
@@ -84,14 +70,17 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         kind: FunctionKind,
         scanner: &'b mut Scanner<'a>,
         parser: &'b mut Parser<'a>,
-        locals: &'b mut Vec<Local<'a>>,
         strings: &'b mut StringPool,
-        scope_depth: isize,
     ) -> Self {
         let mut function = Function::new();
         if kind != FunctionKind::Script {
             function.name = parser.previous.lexeme_str().to_string();
         }
+
+        let locals = vec![Local {
+            name: Token::new(),
+            depth: 0,
+        }];
 
         Self {
             scanner,
@@ -100,19 +89,12 @@ impl<'a, 'b> CompileSession<'a, 'b> {
             kind,
             strings,
             locals,
-            scope_depth,
+            scope_depth: 0,
         }
     }
 
     fn new_inner(&mut self, kind: FunctionKind) -> CompileSession<'a, '_> {
-        CompileSession::new(
-            kind,
-            self.scanner,
-            self.parser,
-            self.locals,
-            self.strings,
-            self.scope_depth,
-        )
+        CompileSession::new(kind, self.scanner, self.parser, self.strings)
     }
 
     fn declaration(&mut self) {
