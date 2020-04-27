@@ -427,11 +427,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
                 p!(Some(Self::$prefix), $infix, $precedence)
             };
             (Some $prefix: ident, Some $infix: ident, $precedence: ident) => {
-                p!(
-                    Some(Self::$prefix),
-                    Some(Self::$infix),
-                    $precedence
-                )
+                p!(Some(Self::$prefix), Some(Self::$infix), $precedence)
             };
             ($prefix: expr, $infix: expr, $precedence: ident) => {
                 ParseRule {
@@ -453,33 +449,26 @@ impl<'a, 'b> CompileSession<'a, 'b> {
             Minus => p!(Some unary, Some binary, Term),
             Plus => p!(None, Some binary, Term),
             Semicolon => p!(),
-            Slash => p!(None, Some binary, Factor),
-            Star => p!(None, Some binary, Factor),
+            Slash | Star => p!(None, Some binary, Factor),
             Bang => p!(Some unary, None, None),
-            BangEqual => p!(None, Some binary, Equality),
+            BangEqual | EqualEqual => p!(None, Some binary, Equality),
             Equal => p!(),
-            EqualEqual => p!(None, Some binary, Equality),
-            Greater => p!(None, Some binary, Comparison),
-            GreaterEqual => p!(None, Some binary, Comparison),
-            Less => p!(None, Some binary, Comparison),
-            LessEqual => p!(None, Some binary, Comparison),
+            Less | LessEqual | Greater | GreaterEqual => p!(None, Some binary, Comparison),
             Identifier => p!(Some variable, None, None),
             String => p!(Some string, None, None),
             Number => p!(Some number, None, None),
             And => p!(None, Some and, And),
+            Or => p!(None, Some or, Or),
             Class => p!(),
-            Else => p!(),
-            False => p!(Some literal, None, None),
+            True | False | Nil => p!(Some literal, None, None),
             For => p!(),
             Fun => p!(),
             If => p!(),
-            Nil => p!(Some literal, None, None),
-            Or => p!(None, Some or, Or),
+            Else => p!(),
             Print => p!(),
             Return => p!(),
             Super => p!(),
             This => p!(),
-            True => p!(Some literal, None, None),
             Var => p!(),
             While => p!(),
             Error => p!(),
