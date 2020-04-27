@@ -6,23 +6,24 @@ use crate::value::Value;
 use log::Level;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::FromPrimitive;
+use std::rc::Rc;
 
 struct Local<'a> {
     name: Token<'a>,
     depth: isize,
 }
 
-pub struct Compiler<'a> {
-    source: &'a str,
-    scanner: Scanner<'a>,
-    parser: Parser<'a>,
+pub struct Compiler<'a, 'b> {
+    scanner: &'b mut Scanner<'a>,
+    parser: &'b mut Parser<'a>,
     function: Function,
     kind: FunctionKind,
-    strings: &'a mut StringPool,
+    strings: &'b mut StringPool,
     locals: Vec<Local<'a>>,
     scope_depth: isize,
 }
 
+#[derive(PartialEq)]
 pub enum FunctionKind {
     Function,
     Script,
@@ -34,18 +35,30 @@ macro_rules! chunk {
     };
 }
 
-impl<'a> Compiler<'a> {
-    pub fn new(source: &'a str, kind: FunctionKind, strings: &'a mut StringPool) -> Self {
+impl<'a, 'b> Compiler<'a, 'b> {
+    pub fn new(
+        kind: FunctionKind,
+        scanner: &'b mut Scanner<'a>,
+        parser: &'b mut Parser<'a>,
+        strings: &'b mut StringPool,
+    ) -> Self {
+        let mut function = Function::new();
+        if kind != FunctionKind::Script {
+            function.name = parser.previous.lexeme_str().to_string();
+        }
         Self {
-            source,
-            scanner: Scanner::new(source.as_bytes()),
-            parser: Parser::new(),
-            function: Function::new(),
+            scanner,
+            parser,
+            function,
             kind,
             strings,
             locals: Vec::new(),
             scope_depth: 0,
         }
+    }
+
+    fn new_inner(&mut self, kind: FunctionKind) -> Compiler<'a, '_> {
+        Compiler::new(kind, self.scanner, self.parser, self.strings)
     }
 
     pub fn compile(mut self) -> crate::Result<Function> {
@@ -82,17 +95,36 @@ impl<'a> Compiler<'a> {
     }
 
     fn function(&mut self, kind: FunctionKind) {
-        let mut compiler = Compiler::new(self.source, kind, &mut self.strings);
+        let mut compiler = self.new_inner(kind);
 
         compiler.begin_scope();
         compiler.consume(TokenKind::LeftParen, "Expect '(' after function name");
+
+        if !compiler.check(TokenKind::RightParen) {
+            loop {
+                compiler.function.arity += 1;
+                if compiler.function.arity > 255 {
+                    compiler
+                        .parser
+                        .error_at_current("Cannot have more than 255 parameters");
+                }
+
+                let param_constant = compiler.parse_variable("Expect parameter name");
+                compiler.define_variable(param_constant);
+
+                if !compiler.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+
         compiler.consume(TokenKind::RightParen, "Expect ')' after parameters");
 
         compiler.consume(TokenKind::LeftBrace, "Expect '{' before function body");
         compiler.block();
 
         compiler.end_compile();
-        let function = Object::Function(compiler.function);
+        let function = Object::Function(Rc::new(compiler.function));
         self.emit_constant(function.into())
     }
 
@@ -359,7 +391,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn get_rule(&mut self, operator: TokenKind) -> ParseRule<'a> {
+    fn get_rule(&mut self, operator: TokenKind) -> ParseRule<'a, 'b> {
         macro_rules! p {
             () => {
                 p!(None, None, None)
@@ -388,7 +420,7 @@ impl<'a> Compiler<'a> {
 
         use TokenKind::*;
         match operator {
-            LeftParen => p!(Some grouping, None, None),
+            LeftParen => p!(Some grouping, Some call, Call),
             RightParen => p!(),
             LeftBrace => p!(),
             RightBrace => p!(),
@@ -429,6 +461,32 @@ impl<'a> Compiler<'a> {
             Error => p!(),
             Eof => p!(),
         }
+    }
+
+    fn call(&mut self, _can_assign: bool) {
+        let arg_count = self.arg_list();
+        self.emit_op(OpCode::Call);
+        self.emit_byte(arg_count);
+    }
+
+    fn arg_list(&mut self) -> u8 {
+        let mut arg_count = 0;
+        if !self.check(TokenKind::RightParen) {
+            loop {
+                self.expression();
+                if arg_count == 255 {
+                    self.parser.error("Cannot have more than 255 arguments");
+                }
+                arg_count += 1;
+
+                if !self.eat(TokenKind::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenKind::RightParen, "Expect ')' after arguments");
+        arg_count
     }
 
     fn variable(&mut self, can_assign: bool) {
@@ -669,11 +727,11 @@ impl<'a> Compiler<'a> {
     }
 }
 
-type ParseFn<'a> = Box<dyn Fn(&mut Compiler<'a>, bool)>;
+type ParseFn<'a, 'b> = Box<dyn Fn(&mut Compiler<'a, 'b>, bool)>;
 
-struct ParseRule<'a> {
-    prefix: Option<ParseFn<'a>>,
-    infix: Option<ParseFn<'a>>,
+struct ParseRule<'a, 'b> {
+    prefix: Option<ParseFn<'a, 'b>>,
+    infix: Option<ParseFn<'a, 'b>>,
     precedence: Precedence,
 }
 
@@ -700,7 +758,7 @@ impl Precedence {
     }
 }
 
-struct Parser<'a> {
+pub struct Parser<'a> {
     current: Token<'a>,
     previous: Token<'a>,
     had_error: bool,
@@ -729,7 +787,7 @@ macro_rules! error_at {
 }
 
 impl<'a> Parser<'a> {
-    fn new() -> Parser<'a> {
+    pub fn new() -> Parser<'a> {
         Parser {
             current: Token::new(),
             previous: Token::new(),
@@ -916,6 +974,7 @@ impl<'a> Scanner<'a> {
             b"else" => TokenKind::Else,
             b"false" => TokenKind::False,
             b"for" => TokenKind::For,
+            b"fun" => TokenKind::Fun,
             b"if" => TokenKind::If,
             b"nil" => TokenKind::Nil,
             b"or" => TokenKind::Or,

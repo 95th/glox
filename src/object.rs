@@ -1,10 +1,11 @@
 use crate::chunk::Chunk;
 use crate::intern::StringPool;
+use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum Object {
     String(u32),
-    Function(Function),
+    Function(Rc<Function>),
 }
 
 impl Object {
@@ -12,18 +13,18 @@ impl Object {
         Self::String(pool.intern(s))
     }
 
-    pub fn new_function(name: &str, arity: u32, pool: &mut StringPool) -> Self {
-        Self::Function(Function {
-            name: pool.intern(name) as i32,
+    pub fn new_function(name: &str, arity: u32) -> Self {
+        Self::Function(Rc::new(Function {
+            name: name.to_string(),
             arity,
             chunk: Chunk::new(),
-        })
+        }))
     }
 }
 
 #[derive(Clone)]
 pub struct Function {
-    pub name: i32,
+    pub name: String,
     pub arity: u32,
     pub chunk: Chunk,
 }
@@ -31,7 +32,7 @@ pub struct Function {
 impl Function {
     pub fn new() -> Self {
         Self {
-            name: -1,
+            name: String::new(),
             arity: 0,
             chunk: Chunk::new(),
         }

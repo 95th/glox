@@ -1,5 +1,5 @@
 use crate::chunk::OpCode;
-use crate::compile::{Compiler, FunctionKind};
+use crate::compile::{Compiler, FunctionKind, Parser, Scanner};
 use crate::intern::StringPool;
 use crate::object::{Function, Object};
 use crate::value::Value;
@@ -7,6 +7,7 @@ use crate::Error;
 use log::Level;
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub struct Vm {
     stack: Vec<Value>,
@@ -16,7 +17,7 @@ pub struct Vm {
 }
 
 struct CallFrame {
-    function: Function,
+    function: Rc<Function>,
     ip: usize,
     stack_top: usize,
 }
@@ -32,13 +33,16 @@ impl Vm {
     }
 
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
-        let compiler = Compiler::new(source, FunctionKind::Script, &mut self.strings);
-        let function = compiler.compile()?;
-        self.frames.push(CallFrame {
-            function,
-            ip: 0,
-            stack_top: 0,
-        });
+        let mut scanner = Scanner::new(source.as_bytes());
+        let mut parser = Parser::new();
+        let compiler = Compiler::new(
+            FunctionKind::Script,
+            &mut scanner,
+            &mut parser,
+            &mut self.strings,
+        );
+        let function = Rc::new(compiler.compile()?);
+        self.call_value(Object::Function(function).into(), 0)?;
         self.run()
     }
 
@@ -74,6 +78,9 @@ macro_rules! pop {
 }
 
 macro_rules! peek {
+    ($self: expr, $n: expr) => {
+        $self.stack.iter().nth_back($n).unwrap()
+    };
     ($self: expr) => {
         $self.stack.last().unwrap()
     };
@@ -95,11 +102,17 @@ macro_rules! binary_op {
 
 macro_rules! runtime_error {
     ($self: expr, $fmt: literal $(, $($args: tt)* )?) => {
-        println!($fmt $(, $($args)* )? );
-        let f = frame!($self);
-        let i = f.ip - 1;
-        let line = f.function.chunk.lines[i];
-        println!("[line: {}] in script", line);
+        eprintln!($fmt $(, $($args)* )? );
+
+        for f in $self.frames.iter().rev() {
+            eprint!("[line {}] in ", f.function.chunk.lines[f.ip - 1]);
+            if f.function.name.is_empty() {
+                eprintln!("script");
+            } else {
+                eprintln!("{}", f.function.name);
+            }
+        }
+
         $self.stack.clear();
         return Err(Error::Runtime);
     }
@@ -226,10 +239,46 @@ impl Vm {
                     let offset = self.read_u16().unwrap();
                     frame!(self).ip -= offset as usize;
                 }
+                Call => {
+                    let arg_count = self.read_byte().unwrap();
+                    self.call_value(peek!(self, arg_count as usize).clone(), arg_count)?;
+                }
                 Return => return Ok(()),
             }
         }
 
+        Ok(())
+    }
+
+    fn call_value(&mut self, callee: Value, arg_count: u8) -> crate::Result<()> {
+        match callee {
+            Value::Object(Object::Function(f)) => return self.call(f, arg_count),
+            _ => {}
+        }
+
+        runtime_error!(self, "Can only call functions and classes");
+    }
+
+    fn call(&mut self, function: Rc<Function>, arg_count: u8) -> crate::Result<()> {
+        if arg_count as u32 != function.arity {
+            runtime_error!(
+                self,
+                "Expected {} arguments but got {}",
+                function.arity,
+                arg_count
+            );
+        }
+
+        if self.frames.len() == self.frames.capacity() {
+            runtime_error!(self, "Stack overflow",);
+        }
+
+        let frame = CallFrame {
+            function,
+            ip: 0,
+            stack_top: self.stack.len() - arg_count as usize,
+        };
+        self.frames.push(frame);
         Ok(())
     }
 

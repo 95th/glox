@@ -1,5 +1,5 @@
 use crate::intern::StringPool;
-use crate::object::Object;
+use crate::object::{Function, Object};
 use std::fmt;
 
 macro_rules! impl_is {
@@ -45,11 +45,15 @@ impl Value {
     impl_is!(is_nil, Self::Nil);
     impl_is!(is_boolean, Self::Boolean(_));
     impl_is!(is_double, Self::Double(_));
+    impl_is!(is_object, Self::Object(_));
     impl_is!(is_string, Self::Object(Object::String(_)));
+    impl_is!(is_function, Self::Object(Object::Function(_)));
 
     impl_as!(as_boolean, Self::Boolean(x), *x, bool);
     impl_as!(as_double, Self::Double(x), *x, f64);
+    impl_as!(as_object, Self::Object(x), x, &Object);
     impl_as!(as_string, Self::Object(Object::String(x)), *x, u32);
+    impl_as!(as_function, Self::Object(Object::Function(x)), x, &Function);
 }
 
 impl_from! {
@@ -66,7 +70,11 @@ impl Value {
             Value::Double(x) => write!(w, "{}", x),
             Value::Object(Object::String(x)) => write!(w, "{}", strings.lookup(*x)),
             Value::Object(Object::Function(x)) => {
-                write!(w, "<fn {}>", strings.lookup(x.name as u32))
+                if x.name.is_empty() {
+                    write!(w, "<script>")
+                } else {
+                    write!(w, "<fn {}>", x.name)
+                }
             }
         }
     }
