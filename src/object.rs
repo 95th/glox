@@ -10,6 +10,7 @@ pub enum Object {
     String(u32),
     Function(Rc<Function>),
     NativeFn(NativeFn),
+    Closure(ClosureFn),
 }
 
 impl Object {
@@ -50,4 +51,9 @@ impl PartialEq for Object {
             _ => false,
         }
     }
+}
+
+#[derive(Clone)]
+pub struct ClosureFn {
+    pub function: Rc<Function>,
 }

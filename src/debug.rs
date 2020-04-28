@@ -13,7 +13,7 @@ impl Chunk {
         }
     }
 
-    pub fn disassemble_instr(&self, offset: usize, strings: &StringPool) -> usize {
+    pub fn disassemble_instr(&self, mut offset: usize, strings: &StringPool) -> usize {
         let buf = &mut format!("{:04}", offset);
 
         if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
@@ -45,6 +45,15 @@ impl Chunk {
             Jump | JumpIfFalse => self.jump_instr(opcode, buf, 1, offset),
 
             Loop => self.jump_instr(opcode, buf, -1, offset),
+
+            Closure => {
+                offset += 1;
+                let constant = self.code[offset];
+                offset += 1;
+                write!(buf, "{:-16?} {:4}", opcode, constant).unwrap();
+                self.write_value(constant, buf, strings);
+                offset
+            }
         };
 
         trace!("{}", buf);

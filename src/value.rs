@@ -1,6 +1,7 @@
 use crate::intern::StringPool;
 use crate::object::{Function, Object};
 use std::fmt;
+use std::rc::Rc;
 
 macro_rules! impl_is {
     ($fn: ident, $pat: pat) => {
@@ -53,7 +54,12 @@ impl Value {
     impl_as!(as_double, Self::Double(x), *x, f64);
     impl_as!(as_object, Self::Object(x), x, &Object);
     impl_as!(as_string, Self::Object(Object::String(x)), *x, u32);
-    impl_as!(as_function, Self::Object(Object::Function(x)), x, &Function);
+    impl_as!(
+        as_function,
+        Self::Object(Object::Function(x)),
+        x,
+        &Rc<Function>
+    );
 }
 
 impl_from! {
@@ -77,6 +83,7 @@ impl Value {
                 }
             }
             Value::Object(Object::NativeFn(_)) => write!(w, "<native fn>"),
+            Value::Object(Object::Closure(x)) => write!(w, "<fn {}>", x.function.name),
         }
     }
 }

@@ -149,7 +149,9 @@ impl<'a, 'b> CompileSession<'a, 'b> {
 
         inner.end_compile();
         let function = Object::Function(Rc::new(inner.function));
-        self.emit_constant(function.into())
+        self.emit_op(OpCode::Closure);
+        let c = self.make_constant(function.into());
+        self.emit_byte(c)
     }
 
     fn var_declaration(&mut self) {

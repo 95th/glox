@@ -1,7 +1,7 @@
 use crate::chunk::OpCode;
 use crate::compile::{Compiler, FunctionKind};
 use crate::intern::StringPool;
-use crate::object::{Function, NativeFn, Object};
+use crate::object::{ClosureFn, NativeFn, Object};
 use crate::value::Value;
 use crate::Error;
 use log::Level;
@@ -18,7 +18,7 @@ pub struct Vm {
 }
 
 struct CallFrame {
-    function: Rc<Function>,
+    closure: ClosureFn,
     ip: usize,
     stack_top: usize,
 }
@@ -38,8 +38,9 @@ impl Vm {
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
         let compiler = Compiler::new(source, &mut self.strings);
         let function = Rc::new(compiler.compile(FunctionKind::Script)?);
-        self.stack.push(Object::Function(function.clone()).into());
-        self.call_value(Object::Function(function).into(), 0)?;
+        let closure = Object::Closure(ClosureFn { function });
+        self.stack.push(closure.clone().into());
+        self.call_value(closure.into(), 0)?;
         self.run()
     }
 
@@ -108,11 +109,12 @@ macro_rules! runtime_error {
         eprintln!($fmt $(, $($args)* )? );
 
         for f in $self.frames.iter().rev() {
-            eprint!("[line {}] in ", f.function.chunk.lines[f.ip - 1]);
-            if f.function.name.is_empty() {
+            let fun = &f.closure.function;
+            eprint!("[line {}] in ", fun.chunk.lines[f.ip - 1]);
+            if fun.name.is_empty() {
                 eprintln!("script");
             } else {
-                eprintln!("<fn {}>", f.function.name);
+                eprintln!("<fn {}>", fun.name);
             }
         }
 
@@ -135,7 +137,10 @@ impl Vm {
             if log_enabled!(Level::Trace) {
                 self.print_stack(&self.strings);
                 let f = frame!(self);
-                f.function.chunk.disassemble_instr(f.ip - 1, &self.strings);
+                f.closure
+                    .function
+                    .chunk
+                    .disassemble_instr(f.ip - 1, &self.strings);
             }
 
             match instr {
@@ -246,6 +251,11 @@ impl Vm {
                     let arg_count = self.read_byte().unwrap();
                     self.call_value(peek!(self, arg_count as usize).clone(), arg_count)?;
                 }
+                Closure => {
+                    let function = self.read_constant().as_function().unwrap().clone();
+                    let closure = Object::Closure(ClosureFn { function });
+                    push!(self, closure.into());
+                }
                 Return => {
                     let result = pop!(self);
 
@@ -272,27 +282,31 @@ impl Vm {
     }
 
     fn call_value(&mut self, callee: Value, arg_count: u8) -> crate::Result<()> {
-        match callee {
-            Value::Object(Object::Function(f)) => return self.call(f, arg_count),
-            Value::Object(Object::NativeFn(f)) => {
-                let start = self.stack.len() - arg_count as usize - 1;
-                let result = f(&self.stack[start..]);
-                self.stack.truncate(start);
-                push!(self, result);
-                return Ok(());
+        if let Value::Object(obj) = callee {
+            match obj {
+                Object::Closure(closure) => {
+                    return self.call(closure, arg_count);
+                }
+                Object::NativeFn(f) => {
+                    let start = self.stack.len() - arg_count as usize - 1;
+                    let result = f(&self.stack[start..]);
+                    self.stack.truncate(start);
+                    push!(self, result);
+                    return Ok(());
+                }
+                _ => {}
             }
-            _ => {}
         }
 
         runtime_error!(self, "Can only call functions and classes");
     }
 
-    fn call(&mut self, function: Rc<Function>, arg_count: u8) -> crate::Result<()> {
-        if arg_count as u32 != function.arity {
+    fn call(&mut self, closure: ClosureFn, arg_count: u8) -> crate::Result<()> {
+        if arg_count as u32 != closure.function.arity {
             runtime_error!(
                 self,
                 "Expected {} arguments but got {}",
-                function.arity,
+                closure.function.arity,
                 arg_count
             );
         }
@@ -302,7 +316,7 @@ impl Vm {
         }
 
         let frame = CallFrame {
-            function,
+            closure,
             ip: 0,
             stack_top: self.stack.len() - arg_count as usize - 1,
         };
@@ -312,7 +326,7 @@ impl Vm {
 
     fn read_byte(&mut self) -> Option<u8> {
         let f = frame!(self);
-        let byte = *f.function.chunk.code.get(f.ip)?;
+        let byte = *f.closure.function.chunk.code.get(f.ip)?;
         f.ip += 1;
         Some(byte)
     }
@@ -323,13 +337,13 @@ impl Vm {
 
     fn read_constant(&mut self) -> Value {
         let idx = self.read_byte().unwrap() as usize;
-        frame!(self).function.chunk.values[idx].clone()
+        frame!(self).closure.function.chunk.values[idx].clone()
     }
 
     fn read_u16(&mut self) -> Option<u16> {
         let f = frame!(self);
-        let hi = *f.function.chunk.code.get(f.ip)?;
-        let lo = *f.function.chunk.code.get(f.ip + 1)?;
+        let hi = *f.closure.function.chunk.code.get(f.ip)?;
+        let lo = *f.closure.function.chunk.code.get(f.ip + 1)?;
         f.ip += 2;
         let out = (hi as u16) << 8 | lo as u16;
         Some(out)
