@@ -235,6 +235,8 @@ impl<'a, 'b> CompileSession<'a, 'b> {
             self.for_statement();
         } else if self.eat(TokenKind::If) {
             self.if_statement();
+        } else if self.eat(TokenKind::Return) {
+            self.return_statement();
         } else if self.eat(TokenKind::While) {
             self.while_statement();
         } else if self.eat(TokenKind::LeftBrace) {
@@ -344,6 +346,20 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         }
 
         self.patch_jump(else_jump);
+    }
+
+    fn return_statement(&mut self) {
+        if self.kind == FunctionKind::Script {
+            self.parser.error("Cannot return from top level code");
+        }
+
+        if self.eat(TokenKind::Semicolon) {
+            self.emit_return();
+        } else {
+            self.expression();
+            self.consume(TokenKind::Semicolon, "Expect ';' after return value");
+            self.emit_op(OpCode::Return);
+        }
     }
 
     fn while_statement(&mut self) {
@@ -722,6 +738,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
     }
 
     fn emit_return(&mut self) {
+        self.emit_op(OpCode::Nil);
         self.emit_op(OpCode::Return);
     }
 

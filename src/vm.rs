@@ -246,7 +246,6 @@ impl Vm {
                     self.stack.truncate(f.stack_top);
 
                     if self.frames.is_empty() {
-                        self.stack.pop();
                         return Ok(());
                     }
 
