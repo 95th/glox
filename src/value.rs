@@ -76,6 +76,7 @@ impl Value {
                     write!(w, "<fn {}>", x.name)
                 }
             }
+            Value::Object(Object::NativeFn(_)) => write!(w, "<native fn>"),
         }
     }
 }

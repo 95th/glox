@@ -1,11 +1,15 @@
 use crate::chunk::Chunk;
 use crate::intern::StringPool;
+use crate::value::Value;
 use std::rc::Rc;
+
+pub type NativeFn = fn(&[Value]) -> Value;
 
 #[derive(Clone)]
 pub enum Object {
     String(u32),
     Function(Rc<Function>),
+    NativeFn(NativeFn),
 }
 
 impl Object {

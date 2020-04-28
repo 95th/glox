@@ -1,13 +1,14 @@
 use crate::chunk::OpCode;
 use crate::compile::{Compiler, FunctionKind};
 use crate::intern::StringPool;
-use crate::object::{Function, Object};
+use crate::object::{Function, NativeFn, Object};
 use crate::value::Value;
 use crate::Error;
 use log::Level;
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct Vm {
     stack: Vec<Value>,
@@ -24,12 +25,14 @@ struct CallFrame {
 
 impl Vm {
     pub fn new() -> Self {
-        Self {
+        let mut vm = Self {
             stack: Vec::with_capacity(256),
             frames: Vec::with_capacity(64),
             strings: StringPool::new(),
             globals: HashMap::new(),
-        }
+        };
+        vm.init();
+        vm
     }
 
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
@@ -56,6 +59,12 @@ impl Vm {
         self.frames.clear();
         self.globals.clear();
         self.strings.clear();
+        self.init();
+    }
+
+    fn init(&mut self) {
+        self.globals.clear();
+        self.define_native("clock", clock);
     }
 }
 
@@ -257,9 +266,21 @@ impl Vm {
         Ok(())
     }
 
+    fn define_native(&mut self, name: &str, f: NativeFn) {
+        let name = self.strings.intern(name);
+        self.globals.insert(name, Object::NativeFn(f).into());
+    }
+
     fn call_value(&mut self, callee: Value, arg_count: u8) -> crate::Result<()> {
         match callee {
             Value::Object(Object::Function(f)) => return self.call(f, arg_count),
+            Value::Object(Object::NativeFn(f)) => {
+                let start = self.stack.len() - arg_count as usize - 1;
+                let result = f(&self.stack[start..]);
+                self.stack.truncate(start);
+                push!(self, result);
+                return Ok(());
+            }
             _ => {}
         }
 
@@ -317,4 +338,12 @@ impl Vm {
 
 fn is_falsey(value: &Value) -> bool {
     matches!(value, Value::Nil | Value::Boolean(false))
+}
+
+fn clock(_: &[Value]) -> Value {
+    let sec = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as f64;
+    Value::Double(sec)
 }
