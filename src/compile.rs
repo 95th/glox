@@ -4,8 +4,6 @@ use crate::object::Function;
 use crate::object::Object;
 use crate::value::Value;
 use log::Level;
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::FromPrimitive;
 use std::rc::Rc;
 
 struct Local<'a> {
@@ -406,10 +404,10 @@ impl<'a, 'b> CompileSession<'a, 'b> {
     }
 
     fn expression(&mut self) {
-        self.parse_precendence(Precedence::Assignment);
+        self.parse_precendence(Cmp::Lte(Precedence::Assignment));
     }
 
-    fn parse_precendence(&mut self, precedence: Precedence) {
+    fn parse_precendence(&mut self, precedence: Cmp<Precedence>) {
         self.advance();
         let prefix_rule = match self.get_rule(self.parser.previous.kind).prefix {
             Some(rule) => rule,
@@ -419,10 +417,10 @@ impl<'a, 'b> CompileSession<'a, 'b> {
             }
         };
 
-        let can_assign = precedence <= Precedence::Assignment;
+        let can_assign = precedence.cmp(&Precedence::Assignment);
         prefix_rule(self, can_assign);
 
-        while precedence <= self.get_rule(self.parser.current.kind).precedence {
+        while precedence.cmp(&self.get_rule(self.parser.current.kind).precedence) {
             self.advance();
             let infix_rule = self.get_rule(self.parser.previous.kind).infix.unwrap();
             infix_rule(self, can_assign);
@@ -592,7 +590,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         let operator = self.parser.previous.kind;
 
         // Compile the operand
-        self.parse_precendence(Precedence::Unary);
+        self.parse_precendence(Cmp::Lte(Precedence::Unary));
 
         // Emit the operator instruction
         match operator {
@@ -608,7 +606,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
 
         // Compile the right operand
         let rule = self.get_rule(operator);
-        self.parse_precendence(rule.precedence.next_higher().unwrap());
+        self.parse_precendence(Cmp::Lt(rule.precedence));
 
         // Emit the operator instruction
         use TokenKind::*;
@@ -631,7 +629,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         let end_jump = self.emit_jump(OpCode::Jump);
 
         self.emit_op(OpCode::Pop);
-        self.parse_precendence(Precedence::And);
+        self.parse_precendence(Cmp::Lte(Precedence::And));
 
         self.patch_jump(end_jump);
     }
@@ -643,7 +641,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         self.patch_jump(else_jump);
         self.emit_op(OpCode::Pop);
 
-        self.parse_precendence(Precedence::Or);
+        self.parse_precendence(Cmp::Lte(Precedence::Or));
         self.patch_jump(end_jump);
     }
 
@@ -767,7 +765,7 @@ struct ParseRule<'a, 'b> {
     precedence: Precedence,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, FromPrimitive, ToPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(u8)]
 enum Precedence {
     None,
@@ -780,13 +778,19 @@ enum Precedence {
     Factor,     // * /
     Unary,      // ! -
     Call,       // . ()
-    Primary,
 }
 
-impl Precedence {
-    fn next_higher(self) -> Option<Self> {
-        let next = (self as u8).checked_add(1)?;
-        Self::from_u8(next)
+enum Cmp<T> {
+    Lt(T),
+    Lte(T),
+}
+
+impl<T: PartialOrd<T>> Cmp<T> {
+    fn cmp(&self, other: &T) -> bool {
+        match self {
+            Self::Lt(t) => t < other,
+            Self::Lte(t) => t <= other,
+        }
     }
 }
 
