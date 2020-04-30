@@ -14,7 +14,7 @@ macro_rules! impl_is {
 macro_rules! impl_as {
     ($fn: ident, $pat: pat, $val: expr, $ty: ty) => {
         pub fn $fn(&self) -> Option<$ty> {
-             match self {
+            match self {
                 $pat => Some($val),
                 _ => None,
             }
@@ -75,15 +75,9 @@ impl Value {
             Value::Boolean(x) => write!(w, "{}", x),
             Value::Double(x) => write!(w, "{}", x),
             Value::Object(Object::String(x)) => write!(w, "{}", strings.lookup(*x)),
-            Value::Object(Object::Function(x)) => {
-                if x.name.is_empty() {
-                    write!(w, "<script>")
-                } else {
-                    write!(w, "<fn {}>", x.name)
-                }
-            }
+            Value::Object(Object::Function(x)) => write!(w, "{}", x),
             Value::Object(Object::NativeFn(_)) => write!(w, "<native fn>"),
-            Value::Object(Object::Closure(x)) => write!(w, "<fn {}>", x.function.name),
+            Value::Object(Object::Closure(x)) => write!(w, "{}", x.function),
         }
     }
 }

@@ -1,6 +1,7 @@
 use crate::chunk::Chunk;
 use crate::intern::StringPool;
 use crate::value::Value;
+use std::fmt;
 use std::rc::Rc;
 
 pub type NativeFn = fn(&[Value]) -> Value;
@@ -40,6 +41,16 @@ impl Function {
             name: String::new(),
             arity: 0,
             chunk: Chunk::new(),
+        }
+    }
+}
+
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.name.is_empty() {
+            write!(f, "<script>")
+        } else {
+            write!(f, "<fn {}>", self.name)
         }
     }
 }

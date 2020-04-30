@@ -15,6 +15,7 @@ pub struct Compiler<'a> {
     scanner: Scanner<'a>,
     parser: Parser<'a>,
     strings: &'a mut StringPool,
+    locals: Vec<Local<'a>>,
 }
 
 impl<'a> Compiler<'a> {
@@ -23,12 +24,19 @@ impl<'a> Compiler<'a> {
             scanner: Scanner::new(source.as_bytes()),
             parser: Parser::new(),
             strings,
+            locals: Vec::new(),
         }
     }
 
     pub fn compile(mut self, kind: FunctionKind) -> crate::Result<Function> {
-        let mut session =
-            CompileSession::new(kind, &mut self.scanner, &mut self.parser, self.strings);
+        let mut session = CompileSession::new(
+            kind,
+            &mut self.scanner,
+            &mut self.parser,
+            self.strings,
+            &mut self.locals,
+            0,
+        );
         session.advance();
         session.declaration();
         session.end_compile();
@@ -47,7 +55,8 @@ struct CompileSession<'a, 'b> {
     function: Function,
     kind: FunctionKind,
     strings: &'b mut StringPool,
-    locals: Vec<Local<'a>>,
+    locals: &'b mut Vec<Local<'a>>,
+    stack_top: usize,
     scope_depth: isize,
 }
 
@@ -69,16 +78,18 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         scanner: &'b mut Scanner<'a>,
         parser: &'b mut Parser<'a>,
         strings: &'b mut StringPool,
+        locals: &'b mut Vec<Local<'a>>,
+        stack_top: usize,
     ) -> Self {
         let mut function = Function::new();
         if kind != FunctionKind::Script {
             function.name = parser.previous.lexeme_str().to_string();
         }
 
-        let locals = vec![Local {
+        locals.push(Local {
             name: Token::new(),
             depth: 0,
-        }];
+        });
 
         Self {
             scanner,
@@ -88,11 +99,19 @@ impl<'a, 'b> CompileSession<'a, 'b> {
             strings,
             locals,
             scope_depth: 0,
+            stack_top,
         }
     }
 
     fn new_inner(&mut self, kind: FunctionKind) -> CompileSession<'a, '_> {
-        CompileSession::new(kind, self.scanner, self.parser, self.strings)
+        CompileSession::new(
+            kind,
+            self.scanner,
+            self.parser,
+            self.strings,
+            self.locals,
+            self.locals.len(),
+        )
     }
 
     fn declaration(&mut self) {
@@ -542,17 +561,22 @@ impl<'a, 'b> CompileSession<'a, 'b> {
 
     fn resolve_local(&mut self, name: &str) -> Option<u8> {
         let parser = &mut self.parser;
-        self.locals.iter().enumerate().rev().find_map(|(i, l)| {
-            if l.name.lexeme == name.as_bytes() {
-                if l.depth == -1 {
-                    parser.error("Cannot read local variable in its own initializer");
-                }
+        self.locals
+            .iter()
+            .skip(self.stack_top)
+            .enumerate()
+            .rev()
+            .find_map(|(i, l)| {
+                if l.name.lexeme == name.as_bytes() {
+                    if l.depth == -1 {
+                        parser.error("Cannot read local variable in its own initializer");
+                    }
 
-                Some(i as u8)
-            } else {
-                None
-            }
-        })
+                    Some(i as u8)
+                } else {
+                    None
+                }
+            })
     }
 
     fn string(&mut self, _can_assign: bool) {
@@ -685,6 +709,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         if log_enabled!(Level::Trace) {
             chunk!(self).disassemble("code", self.strings);
         }
+        self.locals.truncate(self.stack_top);
     }
 
     fn emit_jump(&mut self, op: OpCode) -> usize {

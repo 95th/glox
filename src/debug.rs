@@ -50,7 +50,7 @@ impl Chunk {
                 offset += 1;
                 let constant = self.code[offset];
                 offset += 1;
-                write!(buf, "{:-16?} {:4}", opcode, constant).unwrap();
+                write!(buf, "{:-16?} {:4} ", opcode, constant).unwrap();
                 self.write_value(constant, buf, strings);
                 offset
             }
