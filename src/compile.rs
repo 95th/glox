@@ -1,7 +1,7 @@
+use crate::alloc::{Alloc, String, Vec};
 use crate::chunk::OpCode;
 use crate::intern::StringPool;
-use crate::object::Function;
-use crate::object::Object;
+use crate::object::{Function, Object};
 use crate::value::Value;
 use log::Level;
 use std::rc::Rc;
@@ -11,24 +11,26 @@ struct Local<'a> {
     depth: isize,
 }
 
-pub struct Compiler<'a> {
+pub struct Compiler<'a, A: Alloc> {
     scanner: Scanner<'a>,
     parser: Parser<'a>,
-    strings: &'a mut StringPool,
-    locals: Vec<Local<'a>>,
+    strings: &'a mut StringPool<A>,
+    locals: Vec<Local<'a>, A>,
+    alloc: A,
 }
 
-impl<'a> Compiler<'a> {
-    pub fn new(source: &'a str, strings: &'a mut StringPool) -> Self {
+impl<'a, A: Alloc> Compiler<'a, A> {
+    pub fn new(source: &'a str, strings: &'a mut StringPool<A>, alloc: A) -> Self {
         Self {
             scanner: Scanner::new(source.as_bytes()),
             parser: Parser::new(),
             strings,
-            locals: Vec::new(),
+            locals: Vec::new_in(alloc),
+            alloc,
         }
     }
 
-    pub fn compile(mut self, kind: FunctionKind) -> crate::Result<Function> {
+    pub fn compile(mut self, kind: FunctionKind) -> crate::Result<Function<A>> {
         let mut session = CompileSession::new(
             kind,
             &mut self.scanner,
@@ -36,6 +38,7 @@ impl<'a> Compiler<'a> {
             self.strings,
             &mut self.locals,
             0,
+            self.alloc,
         );
         session.advance();
         session.declaration();
@@ -49,15 +52,16 @@ impl<'a> Compiler<'a> {
     }
 }
 
-struct CompileSession<'a, 'b> {
+struct CompileSession<'a, 'b, A: Alloc> {
     scanner: &'b mut Scanner<'a>,
     parser: &'b mut Parser<'a>,
-    function: Function,
+    function: Function<A>,
     kind: FunctionKind,
-    strings: &'b mut StringPool,
-    locals: &'b mut Vec<Local<'a>>,
+    strings: &'b mut StringPool<A>,
+    locals: &'b mut Vec<Local<'a>, A>,
     stack_top: usize,
     scope_depth: isize,
+    alloc: A,
 }
 
 #[derive(PartialEq)]
@@ -72,18 +76,19 @@ macro_rules! chunk {
     };
 }
 
-impl<'a, 'b> CompileSession<'a, 'b> {
+impl<'a, 'b, A: Alloc> CompileSession<'a, 'b, A> {
     fn new(
         kind: FunctionKind,
         scanner: &'b mut Scanner<'a>,
         parser: &'b mut Parser<'a>,
-        strings: &'b mut StringPool,
-        locals: &'b mut Vec<Local<'a>>,
+        strings: &'b mut StringPool<A>,
+        locals: &'b mut Vec<Local<'a>, A>,
         stack_top: usize,
+        alloc: A,
     ) -> Self {
-        let mut function = Function::new();
+        let mut function = Function::new(alloc);
         if kind != FunctionKind::Script {
-            function.name = parser.previous.lexeme_str().to_string();
+            function.name = String::from_str_in(parser.previous.lexeme_str(), alloc);
         }
 
         locals.push(Local {
@@ -100,10 +105,11 @@ impl<'a, 'b> CompileSession<'a, 'b> {
             locals,
             scope_depth: 0,
             stack_top,
+            alloc,
         }
     }
 
-    fn new_inner(&mut self, kind: FunctionKind) -> CompileSession<'a, '_> {
+    fn new_inner(&mut self, kind: FunctionKind) -> CompileSession<'a, '_, A> {
         CompileSession::new(
             kind,
             self.scanner,
@@ -111,6 +117,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
             self.strings,
             self.locals,
             self.locals.len(),
+            self.alloc,
         )
     }
 
@@ -450,7 +457,7 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         }
     }
 
-    fn get_rule(&mut self, operator: TokenKind) -> ParseRule<'a, 'b> {
+    fn get_rule(&mut self, operator: TokenKind) -> ParseRule<'a, 'b, A> {
         macro_rules! p {
             () => {
                 p!(None, None, None)
@@ -767,12 +774,12 @@ impl<'a, 'b> CompileSession<'a, 'b> {
         self.emit_op(OpCode::Return);
     }
 
-    fn emit_constant(&mut self, value: Value) {
+    fn emit_constant(&mut self, value: Value<A>) {
         let constant = self.make_constant(value);
         self.emit_byte2(OpCode::Constant as u8, constant as u8);
     }
 
-    fn make_constant(&mut self, value: Value) -> u8 {
+    fn make_constant(&mut self, value: Value<A>) -> u8 {
         let mut constant = chunk!(self).push_const(value);
         if constant > u8::max_value() as usize {
             self.parser.error("Too many constants in one chunk");
@@ -782,11 +789,11 @@ impl<'a, 'b> CompileSession<'a, 'b> {
     }
 }
 
-type ParseFn<'a, 'b> = fn(&mut CompileSession<'a, 'b>, bool);
+type ParseFn<'a, 'b, A> = fn(&mut CompileSession<'a, 'b, A>, bool);
 
-struct ParseRule<'a, 'b> {
-    prefix: Option<ParseFn<'a, 'b>>,
-    infix: Option<ParseFn<'a, 'b>>,
+struct ParseRule<'a, 'b, A: Alloc> {
+    prefix: Option<ParseFn<'a, 'b, A>>,
+    infix: Option<ParseFn<'a, 'b, A>>,
     precedence: Precedence,
 }
 

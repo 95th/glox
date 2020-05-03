@@ -1,51 +1,44 @@
+use crate::alloc::{Alloc, String};
 use crate::chunk::Chunk;
 use crate::intern::StringPool;
 use crate::value::Value;
 use std::fmt;
 use std::rc::Rc;
 
-pub type NativeFn = fn(&[Value]) -> Value;
+pub type NativeFn<A> = fn(&[Value<A>]) -> Value<A>;
 
 #[derive(Clone)]
-pub enum Object {
+pub enum Object<A: Alloc> {
     String(u32),
-    Function(Rc<Function>),
-    NativeFn(NativeFn),
-    Closure(ClosureFn),
+    Function(Rc<Function<A>>),
+    NativeFn(NativeFn<A>),
+    Closure(ClosureFn<A>),
 }
 
-impl Object {
-    pub fn new_string(s: &str, pool: &mut StringPool) -> Self {
+impl<A: Alloc> Object<A> {
+    pub fn new_string(s: &str, pool: &mut StringPool<A>) -> Self {
         Self::String(pool.intern(s))
     }
-
-    pub fn new_function(name: &str, arity: u32) -> Self {
-        Self::Function(Rc::new(Function {
-            name: name.to_string(),
-            arity,
-            chunk: Chunk::new(),
-        }))
-    }
 }
 
 #[derive(Clone)]
-pub struct Function {
-    pub name: String,
+pub struct Function<A: Alloc> {
+    pub name: String<A>,
     pub arity: u32,
-    pub chunk: Chunk,
+    pub chunk: Chunk<A>,
 }
 
-impl Function {
-    pub fn new() -> Self {
+impl<A: Alloc> Function<A> {
+    pub fn new(alloc: A) -> Self {
         Self {
-            name: String::new(),
+            name: String::new_in(alloc),
             arity: 0,
-            chunk: Chunk::new(),
+            chunk: Chunk::new(alloc),
         }
     }
 }
 
-impl fmt::Display for Function {
+impl<A: Alloc> fmt::Display for Function<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.name.is_empty() {
             write!(f, "<script>")
@@ -55,7 +48,7 @@ impl fmt::Display for Function {
     }
 }
 
-impl PartialEq for Object {
+impl<A: Alloc> PartialEq for Object<A> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Object::String(a), Object::String(b)) => a == b,
@@ -65,6 +58,6 @@ impl PartialEq for Object {
 }
 
 #[derive(Clone)]
-pub struct ClosureFn {
-    pub function: Rc<Function>,
+pub struct ClosureFn<A: Alloc> {
+    pub function: Rc<Function<A>>,
 }
