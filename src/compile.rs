@@ -833,27 +833,6 @@ struct Parser<'a> {
     panic_mode: bool,
 }
 
-macro_rules! error_at {
-    ($self: expr, $where: ident, $msg: expr) => {
-        error_at!($self, &$self.$where, $msg);
-    };
-    ($self: expr, $token: expr, $msg: expr) => {{
-        if !$self.panic_mode {
-            $self.panic_mode = true;
-            print!("[line {}] Error", $token.line);
-
-            match &$token.kind {
-                TokenKind::Eof => print!(" at end"),
-                TokenKind::Error => {}
-                _ => print!(" at '{}'", $token.lexeme_str()),
-            }
-
-            println!(": {}", $msg);
-            $self.had_error = true;
-        }
-    }};
-}
-
 impl<'a> Parser<'a> {
     fn new() -> Parser<'a> {
         Parser {
@@ -865,12 +844,39 @@ impl<'a> Parser<'a> {
     }
 
     fn error_at_current(&mut self, msg: &str) {
-        error_at!(self, current, msg);
+        error(
+            &mut self.panic_mode,
+            &mut self.had_error,
+            &self.current,
+            msg,
+        );
     }
 
     fn error(&mut self, msg: &str) {
-        error_at!(self, previous, msg);
+        error(
+            &mut self.panic_mode,
+            &mut self.had_error,
+            &self.previous,
+            msg,
+        );
     }
+}
+
+fn error(panic_mode: &mut bool, had_error: &mut bool, token: &Token, msg: &str) {
+    if *panic_mode {
+        return;
+    }
+
+    *panic_mode = true;
+    *had_error = true;
+
+    print!("[line {}] Error", token.line);
+    match &token.kind {
+        TokenKind::Eof => print!(" at end"),
+        TokenKind::Error => {}
+        _ => print!(" at '{}'", token.lexeme_str()),
+    }
+    println!(": {}", msg);
 }
 
 struct Scanner<'a> {
@@ -878,16 +884,6 @@ struct Scanner<'a> {
     start: usize,
     current: usize,
     line: usize,
-}
-
-macro_rules! if_match_eq {
-    ($self: expr, $yes: ident, $no: ident) => {
-        if $self.is_match(b'=') {
-            $self.new_token(TokenKind::$yes)
-        } else {
-            $self.new_token(TokenKind::$no)
-        }
-    };
 }
 
 impl<'a> Scanner<'a> {
@@ -901,29 +897,31 @@ impl<'a> Scanner<'a> {
     }
 
     fn scan_token(&mut self) -> Token<'a> {
+        use TokenKind::*;
+
         self.skip_whitespace();
         self.start = self.current;
 
         if let Some(c) = self.advance() {
             match c {
                 // Single character tokens
-                b'(' => self.new_token(TokenKind::LeftParen),
-                b')' => self.new_token(TokenKind::RightParen),
-                b'{' => self.new_token(TokenKind::LeftBrace),
-                b'}' => self.new_token(TokenKind::RightBrace),
-                b';' => self.new_token(TokenKind::Semicolon),
-                b',' => self.new_token(TokenKind::Comma),
-                b'.' => self.new_token(TokenKind::Dot),
-                b'-' => self.new_token(TokenKind::Minus),
-                b'+' => self.new_token(TokenKind::Plus),
-                b'/' => self.new_token(TokenKind::Slash),
-                b'*' => self.new_token(TokenKind::Star),
+                b'(' => self.new_token(LeftParen),
+                b')' => self.new_token(RightParen),
+                b'{' => self.new_token(LeftBrace),
+                b'}' => self.new_token(RightBrace),
+                b';' => self.new_token(Semicolon),
+                b',' => self.new_token(Comma),
+                b'.' => self.new_token(Dot),
+                b'-' => self.new_token(Minus),
+                b'+' => self.new_token(Plus),
+                b'/' => self.new_token(Slash),
+                b'*' => self.new_token(Star),
 
                 // Two character tokens
-                b'!' => if_match_eq!(self, BangEqual, Bang),
-                b'=' => if_match_eq!(self, EqualEqual, Equal),
-                b'<' => if_match_eq!(self, LessEqual, Less),
-                b'>' => if_match_eq!(self, GreaterEqual, Greater),
+                b'!' => self.if_match_eq(BangEqual, Bang),
+                b'=' => self.if_match_eq(EqualEqual, Equal),
+                b'<' => self.if_match_eq(LessEqual, Less),
+                b'>' => self.if_match_eq(GreaterEqual, Greater),
 
                 // Literals
                 b'"' => self.string(),
@@ -933,7 +931,7 @@ impl<'a> Scanner<'a> {
                 _ => self.new_error_token("Unexpected character."),
             }
         } else {
-            self.new_token(TokenKind::Eof)
+            self.new_token(Eof)
         }
     }
 
@@ -976,6 +974,14 @@ impl<'a> Scanner<'a> {
         }
 
         false
+    }
+
+    fn if_match_eq(&mut self, yes: TokenKind, no: TokenKind) -> Token<'a> {
+        if self.is_match(b'=') {
+            self.new_token(yes)
+        } else {
+            self.new_token(no)
+        }
     }
 
     fn peek(&self) -> Option<u8> {
