@@ -1,4 +1,3 @@
-use crate::alloc::{Alloc, Vec};
 use crate::value::Value;
 use num_derive::{FromPrimitive, ToPrimitive};
 
@@ -33,20 +32,16 @@ pub enum OpCode {
     Return,
 }
 
-#[derive(Clone)]
-pub struct Chunk<A: Alloc> {
-    pub code: Vec<u8, A>,
-    pub values: Vec<Value<A>, A>,
-    pub lines: Vec<usize, A>,
+#[derive(Default, Clone)]
+pub struct Chunk {
+    pub code: Vec<u8>,
+    pub values: Vec<Value>,
+    pub lines: Vec<usize>,
 }
 
-impl<A: Alloc> Chunk<A> {
-    pub fn new(alloc: A) -> Self {
-        Self {
-            code: Vec::new_in(alloc),
-            values: Vec::new_in(alloc),
-            lines: Vec::new_in(alloc),
-        }
+impl Chunk {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn push_instr(&mut self, opcode: OpCode, line: usize) {
@@ -58,7 +53,7 @@ impl<A: Alloc> Chunk<A> {
         self.lines.push(line);
     }
 
-    pub fn push_const(&mut self, value: Value<A>) -> usize {
+    pub fn push_const(&mut self, value: Value) -> usize {
         let len = self.values.len();
         self.values.push(value);
         len

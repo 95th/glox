@@ -1,5 +1,4 @@
 use clap::{App, Arg};
-use glox::alloc::LoxAlloc;
 use glox::vm::Vm;
 use glox::Error;
 
@@ -26,8 +25,7 @@ fn run_file(path: &str) {
             std::process::exit(74);
         }
     };
-    let alloc = LoxAlloc::new();
-    let mut vm = Vm::new(&alloc);
+    let mut vm = Vm::new();
     match vm.interpret(&source) {
         Ok(()) => {}
         Err(Error::Compile) => std::process::exit(65),
@@ -36,8 +34,7 @@ fn run_file(path: &str) {
 }
 
 fn repl() {
-    let alloc = LoxAlloc::new();
-    let mut vm = Vm::new(&alloc);
+    let mut vm = Vm::new();
     let mut editor = rustyline::Editor::<()>::new();
     while let Ok(line) = editor.readline("> ") {
         if line == "exit" {

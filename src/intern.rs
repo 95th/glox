@@ -1,24 +1,24 @@
-use crate::alloc::{Alloc, String, Vec};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::mem;
 
-pub struct StringPool<A: Alloc> {
+#[derive(Default)]
+pub struct StringPool {
     map: HashMap<Ptr<str>, u32>,
-    vec: Vec<Ptr<str>, A>,
-    curr_buf: String<A>,
-    full: Vec<String<A>, A>,
-    alloc: A,
+    vec: Vec<Ptr<str>>,
+    curr_buf: String,
+    full: Vec<String>,
 }
 
-impl<A: Alloc> StringPool<A> {
-    pub fn new(alloc: A) -> Self {
+impl StringPool {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn with_capacity(cap: usize) -> Self {
+        let cap = cap.next_power_of_two();
         Self {
-            map: HashMap::new(),
-            vec: Vec::new_in(alloc),
-            curr_buf: String::new_in(alloc),
-            full: Vec::new_in(alloc),
-            alloc,
+            curr_buf: String::with_capacity(cap),
+            ..Default::default()
         }
     }
 
@@ -53,7 +53,7 @@ impl<A: Alloc> StringPool<A> {
         let cap = self.curr_buf.capacity();
         if cap < self.curr_buf.len() + name.len() {
             let new_cap = (cap.max(name.len()) + 1).next_power_of_two();
-            let new_buf = String::with_capacity_in(new_cap, self.alloc);
+            let new_buf = String::with_capacity(new_cap);
             let old_buf = mem::replace(&mut self.curr_buf, new_buf);
             self.full.push(old_buf);
         }

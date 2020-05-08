@@ -1,11 +1,10 @@
-use crate::alloc::Alloc;
 use crate::chunk::{Chunk, OpCode};
 use crate::intern::StringPool;
 use num_traits::FromPrimitive;
 use std::fmt::{Display, Write};
 
-impl<A: Alloc> Chunk<A> {
-    pub fn disassemble(&self, name: impl Display, strings: &StringPool<A>) {
+impl Chunk {
+    pub fn disassemble(&self, name: impl Display, strings: &StringPool) {
         trace!("== {} ==", name);
 
         let mut offset = 0;
@@ -14,7 +13,7 @@ impl<A: Alloc> Chunk<A> {
         }
     }
 
-    pub fn disassemble_instr(&self, mut offset: usize, strings: &StringPool<A>) -> usize {
+    pub fn disassemble_instr(&self, mut offset: usize, strings: &StringPool) -> usize {
         let buf = &mut format!("{:04}", offset);
 
         if offset > 0 && self.lines[offset] == self.lines[offset - 1] {
@@ -91,7 +90,7 @@ impl<A: Alloc> Chunk<A> {
         opcode: OpCode,
         offset: usize,
         buf: &mut String,
-        strings: &StringPool<A>,
+        strings: &StringPool,
     ) -> usize {
         let constant = self.code[offset + 1];
         write!(buf, "{:-16?} {:4} ", opcode, constant).unwrap();
@@ -99,7 +98,7 @@ impl<A: Alloc> Chunk<A> {
         offset + 2
     }
 
-    fn write_value(&self, value_idx: u8, buf: &mut String, strings: &StringPool<A>) {
+    fn write_value(&self, value_idx: u8, buf: &mut String, strings: &StringPool) {
         self.values[value_idx as usize].write(buf, strings).unwrap()
     }
 }

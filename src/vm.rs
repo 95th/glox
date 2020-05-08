@@ -1,4 +1,3 @@
-use crate::alloc::{Alloc, Vec};
 use crate::chunk::OpCode;
 use crate::compile::{Compiler, FunctionKind};
 use crate::intern::StringPool;
@@ -11,35 +10,33 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub struct Vm<A: Alloc> {
-    stack: Vec<Value<A>, A>,
-    frames: Vec<CallFrame<A>, A>,
-    strings: StringPool<A>,
-    globals: HashMap<u32, Value<A>>,
-    alloc: A,
+pub struct Vm {
+    stack: Vec<Value>,
+    frames: Vec<CallFrame>,
+    strings: StringPool,
+    globals: HashMap<u32, Value>,
 }
 
-struct CallFrame<A: Alloc> {
-    closure: ClosureFn<A>,
+struct CallFrame {
+    closure: ClosureFn,
     ip: usize,
     stack_top: usize,
 }
 
-impl<A: Alloc> Vm<A> {
-    pub fn new(alloc: A) -> Self {
+impl Vm {
+    pub fn new() -> Self {
         let mut vm = Self {
-            stack: Vec::with_capacity_in(256, alloc),
-            frames: Vec::with_capacity_in(64, alloc),
-            strings: StringPool::new(alloc),
+            stack: Vec::with_capacity(256),
+            frames: Vec::with_capacity(64),
+            strings: StringPool::new(),
             globals: HashMap::new(),
-            alloc,
         };
         vm.init();
         vm
     }
 
     pub fn interpret(&mut self, source: &str) -> crate::Result<()> {
-        let compiler = Compiler::new(source, &mut self.strings, self.alloc);
+        let compiler = Compiler::new(source, &mut self.strings);
         let function = Rc::new(compiler.compile(FunctionKind::Script)?);
         let closure = Object::Closure(ClosureFn { function });
         self.stack.push(closure.clone().into());
@@ -47,7 +44,7 @@ impl<A: Alloc> Vm<A> {
         self.run()
     }
 
-    fn print_stack(&self, strings: &StringPool<A>) {
+    fn print_stack(&self, strings: &StringPool) {
         let mut buf = String::from("          ");
         for val in &self.stack {
             buf.push_str("[ ");
@@ -132,7 +129,7 @@ macro_rules! frame {
     };
 }
 
-impl<A: Alloc> Vm<A> {
+impl Vm {
     fn run(&mut self) -> crate::Result<()> {
         use OpCode::*;
 
@@ -279,12 +276,12 @@ impl<A: Alloc> Vm<A> {
         Ok(())
     }
 
-    fn define_native(&mut self, name: &str, f: NativeFn<A>) {
+    fn define_native(&mut self, name: &str, f: NativeFn) {
         let name = self.strings.intern(name);
         self.globals.insert(name, Object::NativeFn(f).into());
     }
 
-    fn call_value(&mut self, callee: Value<A>, arg_count: u8) -> crate::Result<()> {
+    fn call_value(&mut self, callee: Value, arg_count: u8) -> crate::Result<()> {
         if let Value::Object(obj) = callee {
             match obj {
                 Object::Closure(closure) => {
@@ -304,7 +301,7 @@ impl<A: Alloc> Vm<A> {
         runtime_error!(self, "Can only call functions and classes");
     }
 
-    fn call(&mut self, closure: ClosureFn<A>, arg_count: u8) -> crate::Result<()> {
+    fn call(&mut self, closure: ClosureFn, arg_count: u8) -> crate::Result<()> {
         if arg_count as u32 != closure.function.arity {
             runtime_error!(
                 self,
@@ -338,7 +335,7 @@ impl<A: Alloc> Vm<A> {
         OpCode::from_u8(self.read_byte()?)
     }
 
-    fn read_constant(&mut self) -> Value<A> {
+    fn read_constant(&mut self) -> Value {
         let idx = self.read_byte().unwrap() as usize;
         frame!(self).closure.function.chunk.values[idx].clone()
     }
@@ -353,11 +350,11 @@ impl<A: Alloc> Vm<A> {
     }
 }
 
-fn is_falsey<A: Alloc>(value: &Value<A>) -> bool {
+fn is_falsey(value: &Value) -> bool {
     matches!(value, Value::Nil | Value::Boolean(false))
 }
 
-fn clock<A: Alloc>(_: &[Value<A>]) -> Value<A> {
+fn clock(_: &[Value]) -> Value {
     let sec = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

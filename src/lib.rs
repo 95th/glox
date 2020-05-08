@@ -1,9 +1,6 @@
-#![feature(allocator_api)]
-
 #[macro_use]
 extern crate log;
 
-pub mod alloc;
 pub mod chunk;
 pub mod compile;
 pub mod debug;
